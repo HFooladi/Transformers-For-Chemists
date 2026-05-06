@@ -11,33 +11,52 @@ Typical first-cell usage in a Colab notebook::
     import sys
     sys.path.append("Transformers-For-Chemists/notebooks")
     from utils.colab_setup import ensure_environment
-    ensure_environment(["torch", "rdkit"])  # warns + installs missing pieces
+    ensure_environment(["torch", "rdkit"])  # installs only what's missing
 """
 
 from __future__ import annotations
 
+import importlib
+import subprocess
+import sys
 from typing import Iterable
 
 
 REPO_URL = "https://github.com/HFooladi/Transformers-For-Chemists.git"
 
-
-def ensure_environment(packages: Iterable[str]) -> None:
-    """Pip-install any missing packages from ``packages`` (Colab-friendly).
-
-    The function is designed to be called from a notebook cell. It checks
-    whether each package can be imported and only installs the ones that are
-    missing. Installs are done quietly with ``pip install -q``.
-
-    Parameters
-    ----------
-    packages
-        Iterable of pip package names. The package name is also used as the
-        import name; pass ``("rdkit",)`` rather than ``("rdkit-pypi",)``.
-    """
-    raise NotImplementedError("Phase 2: implement in notebook 01.")
+# A few packages whose import name differs from their pip name.
+_PIP_NAME = {
+    "PIL": "pillow",
+    "sklearn": "scikit-learn",
+    "yaml": "pyyaml",
+    "cv2": "opencv-python",
+}
 
 
 def is_colab() -> bool:
-    """Return ``True`` if the current runtime is Google Colab."""
-    raise NotImplementedError("Phase 2: implement in notebook 01.")
+    """Return True if the current runtime is Google Colab."""
+    return "google.colab" in sys.modules
+
+
+def ensure_environment(packages: Iterable[str]) -> None:
+    """Pip-install any packages from ``packages`` that aren't already importable.
+
+    Uses each entry as the *import* name and looks up the pip name via a small
+    override table for the common mismatches (``PIL`` → ``pillow``, etc.).
+    Installs are quiet (``pip install -q``) and only the missing ones are
+    fetched, so re-running the setup cell is cheap.
+    """
+    missing = []
+    for name in packages:
+        try:
+            importlib.import_module(name)
+        except ImportError:
+            missing.append(_PIP_NAME.get(name, name))
+
+    if not missing:
+        return
+
+    print(f"Installing: {', '.join(missing)}")
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "-q", *missing]
+    )

@@ -32,7 +32,7 @@ The following notebooks (01, 02, 03, ...) form the **main learning path** and ar
 
 | Notebook | Description | Open in Colab | Year |
 | -------- | ----------- | -------------- | ---- |
-| 01_From_SMILES_to_Tokens.ipynb | SMILES as sequence; character-level tokenization | _coming soon_ | 2026 |
+| 01_From_SMILES_to_Tokens.ipynb | SMILES as sequence; character-level tokenization | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/01_From_SMILES_to_Tokens.ipynb) | 2026 |
 | 02_Subword_Tokenization.ipynb | BPE and SMILES-pair encoding for molecules | _coming soon_ | 2026 |
 | 03_Embeddings_and_Positions.ipynb | Token embeddings and positional encodings | _coming soon_ | 2026 |
 | 04_Self_Attention_From_Scratch.ipynb | Q/K/V intuition and scaled dot-product attention | _coming soon_ | 2026 |
