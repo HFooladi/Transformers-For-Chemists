@@ -20,6 +20,7 @@ prioritize readability — production users should reach for the HuggingFace
 
 from __future__ import annotations
 
+import re
 from typing import List, Sequence
 
 
@@ -30,6 +31,7 @@ SMILES_ATOM_REGEX = (
     r"(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p"
     r"|\(|\)|\.|=|#|-|\+|\\\\|/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"
 )
+_ATOM_PATTERN = re.compile(SMILES_ATOM_REGEX)
 
 
 # Special tokens used by every tokenizer in the course. The IDs are fixed so
@@ -164,55 +166,209 @@ class CharTokenizer:
         return input_ids, attention_mask
 
 
+def atom_tokenize(smiles: str) -> List[str]:
+    """Split a SMILES string into atom-level tokens via :data:`SMILES_ATOM_REGEX`.
+
+    Multi-character atoms (``Br``, ``Cl``), bracketed atoms (``[nH]``,
+    ``[O-]``), bonds, and ring closures each become single tokens. Anything
+    the regex doesn't match (e.g. whitespace) is dropped silently — pass
+    canonical SMILES.
+    """
+    return _ATOM_PATTERN.findall(smiles)
+
+
 class AtomTokenizer:
-    """Atom/regex-level SMILES tokenizer (notebook 02)."""
+    """Atom-level SMILES tokenizer (notebook 02).
+
+    Uses :func:`atom_tokenize` as the pre-tokenizer so multi-character atoms
+    stay together. Same minimal API as :class:`CharTokenizer`.
+    """
 
     def __init__(self, vocab: Sequence[str] | None = None) -> None:
-        raise NotImplementedError("Phase 3: implement in notebook 02.")
+        self.token_to_id: dict[str, int] = {}
+        self.id_to_token: dict[int, str] = {}
+        for tok in SPECIAL_TOKENS:
+            self._add_token(tok)
+        if vocab is not None:
+            for tok in vocab:
+                self._add_token(tok)
 
-    def encode(self, smiles: str) -> List[int]:
+    def _add_token(self, token: str) -> None:
+        if token in self.token_to_id:
+            return
+        idx = len(self.token_to_id)
+        self.token_to_id[token] = idx
+        self.id_to_token[idx] = token
+
+    def build_vocab(self, smiles_corpus: Sequence[str]) -> None:
+        for smi in smiles_corpus:
+            for tok in atom_tokenize(smi):
+                self._add_token(tok)
+
+    @classmethod
+    def from_smiles(cls, smiles_corpus: Sequence[str]) -> "AtomTokenizer":
+        tk = cls()
+        tk.build_vocab(smiles_corpus)
+        return tk
+
+    @property
+    def vocab_size(self) -> int:
+        return len(self.token_to_id)
+
+    def tokenize(self, smiles: str) -> List[str]:
+        return atom_tokenize(smiles)
+
+    def encode(self, smiles: str, add_special_tokens: bool = False) -> List[int]:
+        ids = [self.token_to_id.get(tok, UNK_ID) for tok in atom_tokenize(smiles)]
+        if add_special_tokens:
+            ids = [CLS_ID, *ids, SEP_ID]
+        return ids
+
+    def decode(self, ids: Sequence[int], skip_special_tokens: bool = False) -> str:
+        out: list[str] = []
+        for idx in ids:
+            tok = self.id_to_token.get(int(idx), "[UNK]")
+            if skip_special_tokens and tok in SPECIAL_TOKENS:
+                continue
+            out.append(tok)
+        return "".join(out)
+
+    def encode_batch(
+        self,
+        smiles_list: Sequence[str],
+        add_special_tokens: bool = True,
+        max_length: int | None = None,
+    ) -> tuple[list[list[int]], list[list[int]]]:
+        encoded = [self.encode(s, add_special_tokens=add_special_tokens) for s in smiles_list]
+        if max_length is not None:
+            encoded = [seq[:max_length] for seq in encoded]
+        target_len = max(len(seq) for seq in encoded)
+        input_ids = [seq + [PAD_ID] * (target_len - len(seq)) for seq in encoded]
+        attention_mask = [[1] * len(seq) + [0] * (target_len - len(seq)) for seq in encoded]
+        return input_ids, attention_mask
+
+
+class _HFTokenizerBackedTokenizer:
+    """Shared base for the two BPE-flavoured tokenizers.
+
+    Both :class:`BPETokenizer` and :class:`SmilesPairTokenizer` train a
+    HuggingFace ``tokenizers.Tokenizer`` under the hood — they only differ in
+    which pre-tokenizer they use. The encode/decode/batch methods are the same
+    for both, so they live here.
+
+    Calling :meth:`train` is required before :meth:`encode`.
+    """
+
+    def __init__(self) -> None:
+        try:
+            from tokenizers import Tokenizer  # noqa: F401
+        except ImportError as e:  # pragma: no cover
+            raise ImportError(
+                "The `tokenizers` package is required for BPE-style tokenizers. "
+                "Install with: pip install tokenizers"
+            ) from e
+        self._hf = None  # populated by .train()
+
+    # Subclasses override _build_tokenizer() to choose the pre-tokenizer.
+    def _build_tokenizer(self):  # pragma: no cover - subclass responsibility
         raise NotImplementedError
 
-    def decode(self, ids: Sequence[int]) -> str:
-        raise NotImplementedError
+    def train(self, smiles_corpus: Sequence[str], vocab_size: int = 1000) -> None:
+        from tokenizers.trainers import BpeTrainer
+
+        tk = self._build_tokenizer()
+        trainer = BpeTrainer(
+            vocab_size=vocab_size,
+            special_tokens=list(SPECIAL_TOKENS),
+            initial_alphabet=[],
+            show_progress=False,
+        )
+        tk.train_from_iterator(list(smiles_corpus), trainer=trainer)
+        self._hf = tk
+
+    @property
+    def vocab_size(self) -> int:
+        if self._hf is None:
+            return 0
+        return self._hf.get_vocab_size()
+
+    def tokenize(self, smiles: str) -> List[str]:
+        if self._hf is None:
+            raise RuntimeError("Tokenizer not trained yet — call .train(corpus) first.")
+        return self._hf.encode(smiles, add_special_tokens=False).tokens
+
+    def encode(self, smiles: str, add_special_tokens: bool = False) -> List[int]:
+        if self._hf is None:
+            raise RuntimeError("Tokenizer not trained yet — call .train(corpus) first.")
+        ids = self._hf.encode(smiles, add_special_tokens=False).ids
+        if add_special_tokens:
+            ids = [CLS_ID, *ids, SEP_ID]
+        return ids
+
+    def decode(self, ids: Sequence[int], skip_special_tokens: bool = False) -> str:
+        if self._hf is None:
+            raise RuntimeError("Tokenizer not trained yet — call .train(corpus) first.")
+        # The HF decoder joins tokens with spaces and replaces continuation
+        # markers; for our SMILES use we want a faithful concatenation.
+        out: list[str] = []
+        for idx in ids:
+            tok = self._hf.id_to_token(int(idx))
+            if tok is None:
+                tok = "[UNK]"
+            if skip_special_tokens and tok in SPECIAL_TOKENS:
+                continue
+            out.append(tok)
+        return "".join(out)
+
+    def encode_batch(
+        self,
+        smiles_list: Sequence[str],
+        add_special_tokens: bool = True,
+        max_length: int | None = None,
+    ) -> tuple[list[list[int]], list[list[int]]]:
+        encoded = [self.encode(s, add_special_tokens=add_special_tokens) for s in smiles_list]
+        if max_length is not None:
+            encoded = [seq[:max_length] for seq in encoded]
+        target_len = max(len(seq) for seq in encoded)
+        input_ids = [seq + [PAD_ID] * (target_len - len(seq)) for seq in encoded]
+        attention_mask = [[1] * len(seq) + [0] * (target_len - len(seq)) for seq in encoded]
+        return input_ids, attention_mask
 
 
-class BPETokenizer:
+class BPETokenizer(_HFTokenizerBackedTokenizer):
     """Byte-Pair Encoding tokenizer trained on a SMILES corpus (notebook 02).
 
-    Wraps the HuggingFace ``tokenizers`` library; the from-scratch BPE merge
-    loop is illustrated separately in notebook 02 for pedagogical purposes.
+    Wraps HuggingFace ``tokenizers`` with the simplest possible setup:
+    BPE model, no normalizer, no pre-tokenizer (BPE operates on the raw
+    character stream). The from-scratch BPE merge loop is illustrated
+    separately in notebook 02 for pedagogical purposes.
     """
 
-    def __init__(self) -> None:
-        raise NotImplementedError("Phase 3: implement in notebook 02.")
+    def _build_tokenizer(self):
+        from tokenizers import Tokenizer
+        from tokenizers.models import BPE
 
-    def train(self, smiles_corpus: Sequence[str], vocab_size: int = 1000) -> None:
-        raise NotImplementedError
-
-    def encode(self, smiles: str) -> List[int]:
-        raise NotImplementedError
-
-    def decode(self, ids: Sequence[int]) -> str:
-        raise NotImplementedError
+        return Tokenizer(BPE(unk_token="[UNK]"))
 
 
-class SmilesPairTokenizer:
+class SmilesPairTokenizer(_HFTokenizerBackedTokenizer):
     """Schwaller-style SMILES-pair tokenizer (notebook 02).
 
-    Same merge algorithm as BPE but operates on the atom-regex pre-tokens
-    instead of raw characters, biasing merges toward chemically meaningful
-    fragments.
+    Same BPE merge algorithm as :class:`BPETokenizer`, but with an atom-regex
+    pre-tokenizer that biases merges to never cross atom boundaries. The
+    resulting vocabulary contains chemically meaningful fragments
+    (``c1ccccc1`` for benzene, ``C(=O)O`` for carboxylic acid, etc.) rather
+    than arbitrary character n-grams.
     """
 
-    def __init__(self) -> None:
-        raise NotImplementedError("Phase 3: implement in notebook 02.")
+    def _build_tokenizer(self):
+        from tokenizers import Regex, Tokenizer
+        from tokenizers.models import BPE
+        from tokenizers.pre_tokenizers import Split
 
-    def train(self, smiles_corpus: Sequence[str], vocab_size: int = 1000) -> None:
-        raise NotImplementedError
-
-    def encode(self, smiles: str) -> List[int]:
-        raise NotImplementedError
-
-    def decode(self, ids: Sequence[int]) -> str:
-        raise NotImplementedError
+        tk = Tokenizer(BPE(unk_token="[UNK]"))
+        tk.pre_tokenizer = Split(
+            pattern=Regex(SMILES_ATOM_REGEX),
+            behavior="isolated",
+        )
+        return tk
