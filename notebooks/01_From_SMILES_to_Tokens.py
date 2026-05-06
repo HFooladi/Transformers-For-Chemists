@@ -50,50 +50,19 @@
 
 # +
 import os
-import subprocess
 import sys
 
-REPO_OWNER = "HFooladi"
-REPO_NAME = "Transformers-For-Chemists"
-REPO_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}.git"
+# Clone the repo if we don't already have access to its utils.
+REPO_URL = "https://github.com/HFooladi/Transformers-For-Chemists.git"
+REPO_DIR = "Transformers-For-Chemists"
+if not any(os.path.isdir(os.path.join(p, "utils")) for p in ("notebooks", f"{REPO_DIR}/notebooks", ".", "..")):
+    # Quiet clone; harmless if it fails (e.g. when running from inside the repo).
+    os.system(f"git clone -q {REPO_URL}")
 
-
-def _find_utils():
-    """Return the first directory under which ``utils/smiles_tokenizers.py``
-    lives, searching the obvious places (Colab clone target, repo root,
-    parent). Returns ``None`` if not found."""
-    for p in (f"{REPO_NAME}/notebooks", "notebooks", ".", ".."):
-        candidate = os.path.join(p, "utils", "smiles_tokenizers.py")
-        if os.path.exists(candidate):
-            return p
-    return None
-
-
-target = _find_utils()
-
-if target is None:
-    print(f"Cloning {REPO_URL} ...")
-    result = subprocess.run(
-        ["git", "clone", "--depth", "1", REPO_URL],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        print(result.stderr)
-        raise RuntimeError(
-            "Could not clone the course repo.\n"
-            "If the repo is still private, either:\n"
-            f"  (a) make it public:  gh repo edit {REPO_OWNER}/{REPO_NAME} --visibility public\n"
-            "  (b) or clone with a token from a separate cell first:\n"
-            f"      !git clone https://USER:TOKEN@github.com/{REPO_OWNER}/{REPO_NAME}.git\n"
-            "      (USER = your GitHub username, TOKEN = a PAT with `repo` scope)"
-        )
-    target = _find_utils()
-
-if target not in sys.path:
-    sys.path.insert(0, target)
-
-print(f"utils available from: {target}")
+# Make `utils` importable from any reasonable working directory.
+for p in (f"{REPO_DIR}/notebooks", "notebooks", ".", ".."):
+    if os.path.isdir(os.path.join(p, "utils")) and p not in sys.path:
+        sys.path.insert(0, p)
 
 from utils.colab_setup import ensure_environment
 
