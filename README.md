@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Transformers For Chemists Banner" style="max-width:100%;">
+  <img src="assets/transformers-for-chemists-banner.png" alt="Transformers For Chemists Banner" style="max-width:100%;">
 </p>
 
 # Transformers For Chemists

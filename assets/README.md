@@ -1,7 +1,7 @@
 # Assets
 
-This directory holds the repository banner and any static images referenced from notebooks or the top-level README.
+Static images referenced from the top-level README and notebooks.
 
-## Required
+## Files
 
-- `banner.png` — the repository header image. **Not yet added.** The top-level README references it; the broken image link will resolve once a banner is dropped here. Suggested style: similar palette and proportions to the GNNs-For-Chemists banner.
+- `transformers-for-chemists-banner.png` — repository header image, embedded at the top of `README.md`.
