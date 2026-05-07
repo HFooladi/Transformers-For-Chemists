@@ -543,3 +543,6 @@ plt.show()
 #   Learning to Align and Translate.* — the original attention paper.
 # - Vaswani, A. et al. (2017). *Attention Is All You Need.* — modern
 #   scaled dot-product self-attention used here.
+# - Schwaller, P. et al. (2019). *Molecular Transformer: A Model for
+#   Uncertainty-Calibrated Chemical Reaction Prediction.* — first big use
+#   of self-attention on SMILES strings.
