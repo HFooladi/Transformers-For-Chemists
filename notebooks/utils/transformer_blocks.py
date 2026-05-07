@@ -27,10 +27,12 @@ import math
 try:
     import torch
     from torch import nn
+    from torch.nn import functional as F
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
     nn = object  # type: ignore
+    F = None  # type: ignore
 
 
 class TokenEmbedding(nn.Module if TORCH_AVAILABLE else object):
@@ -98,10 +100,80 @@ class SinusoidalPositionalEncoding(nn.Module if TORCH_AVAILABLE else object):
 
 
 class ScaledDotProductAttention(nn.Module if TORCH_AVAILABLE else object):
-    """Single-head scaled dot-product attention (notebook 04)."""
+    """Single-head scaled dot-product attention (Vaswani et al., 2017; notebook 04).
+
+    Computes ``softmax(QK^T / sqrt(d_k)) V``. The query, key, and value
+    projections all read from the same input ``x`` (i.e., self-attention) and
+    each maps ``d_model -> d_model``. Multi-head attention, which splits
+    these projections across ``n_heads`` parallel sub-spaces, is built on
+    top of this module in notebook 05.
+
+    The forward pass returns both the attended output and the attention
+    weights so downstream code (notebook 04 visualizations, later sanity
+    checks) can inspect what the model is doing.
+
+    Parameters
+    ----------
+    d_model
+        Feature dimension of the input. Q, K, V each live in ``R^{d_model}``.
+    dropout
+        Dropout probability applied to the *attention weights* (not the
+        output). 0.1 matches the original Transformer.
+
+    Examples
+    --------
+    >>> attn = ScaledDotProductAttention(d_model=64)
+    >>> x = torch.randn(2, 16, 64)
+    >>> out, weights = attn(x)
+    >>> out.shape, weights.shape
+    (torch.Size([2, 16, 64]), torch.Size([2, 16, 16]))
+    """
 
     def __init__(self, d_model: int, dropout: float = 0.1) -> None:
-        raise NotImplementedError("Phase 3: implement in notebook 04.")
+        super().__init__()
+        self.d_model = d_model
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(dropout)
+        self.scale = 1.0 / math.sqrt(d_model)
+
+    def forward(
+        self,
+        x,
+        mask=None,
+        return_attention: bool = True,
+    ):
+        """Run self-attention on ``x``.
+
+        ``x``: ``(batch, seq_len, d_model)`` float tensor.
+        ``mask``: optional ``(batch, seq_len)`` tensor with 1 for real tokens
+        and 0 for padding. The mask is applied on the *key* axis: padded
+        positions cannot be attended to. ``None`` means no masking.
+
+        Returns ``(output, attention_weights)`` where ``output`` has the same
+        shape as ``x`` and ``attention_weights`` has shape
+        ``(batch, seq_len, seq_len)``. If ``return_attention`` is ``False``,
+        the second element is ``None``.
+        """
+        Q = self.w_q(x)
+        K = self.w_k(x)
+        V = self.w_v(x)
+
+        # (B, L, d) @ (B, d, L) -> (B, L, L). The 1/sqrt(d) scale stops the
+        # softmax from saturating once d_model gets large; see notebook 04 §5.
+        scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
+
+        if mask is not None:
+            # mask: (B, L). Broadcast onto the key axis so an attended-to
+            # padding position gets -inf for *every* query.
+            keep = mask.bool().unsqueeze(1)  # (B, 1, L)
+            scores = scores.masked_fill(~keep, float("-inf"))
+
+        attn = F.softmax(scores, dim=-1)
+        attn = self.dropout(attn)
+        out = torch.matmul(attn, V)
+        return (out, attn) if return_attention else (out, None)
 
 
 class MultiHeadAttention(nn.Module if TORCH_AVAILABLE else object):
