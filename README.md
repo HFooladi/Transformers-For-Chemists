@@ -35,7 +35,7 @@ The following notebooks (01, 02, 03, ...) form the **main learning path** and ar
 | 01_From_SMILES_to_Tokens.ipynb | SMILES as sequence; character-level tokenization | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/01_From_SMILES_to_Tokens.ipynb) | 2026 |
 | 02_Subword_Tokenization.ipynb | BPE and SMILES-pair encoding for molecules | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/02_Subword_Tokenization.ipynb) | 2026 |
 | 03_Embeddings_and_Positions.ipynb | Token embeddings and positional encodings | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/03_Embeddings_and_Positions.ipynb) | 2026 |
-| 04_Self_Attention_From_Scratch.ipynb | Q/K/V intuition and scaled dot-product attention | _coming soon_ | 2026 |
+| 04_Self_Attention_From_Scratch.ipynb | Q/K/V intuition and scaled dot-product attention | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/04_Self_Attention_From_Scratch.ipynb) | 2026 |
 | 05_Multi_Head_Attention.ipynb | Multiple heads and head specialization | _coming soon_ | 2026 |
 | 06_The_Transformer_Block.ipynb | Attention + FFN + LayerNorm + residuals | _coming soon_ | 2026 |
 | 07_Training_a_Property_Predictor.ipynb | Single-block transformer trained supervised | _coming soon_ | 2026 |
