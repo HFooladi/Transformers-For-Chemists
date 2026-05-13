@@ -432,6 +432,27 @@ fig.tight_layout()
 plt.show()
 # -
 
+# ⚠️ **Note — these datasets are raw, on purpose.** We did *no*
+# preprocessing here: no salt / solvent stripping, no largest-fragment
+# extraction, no canonicalization, no de-duplication. That's why a handful
+# of BBBP entries blow past 400 tokens — those rows are **multi-fragment
+# SMILES joined by `.`** (salts and co-crystals), so we are counting two
+# molecules at once. The numbers above therefore reflect what you would see
+# if you naïvely pointed a character tokenizer at a downloaded CSV.
+#
+# For real training you would normally:
+#
+# 1. Parse each SMILES with RDKit and **keep only the largest organic
+#    fragment** (e.g. `rdkit.Chem.MolStandardize.rdMolStandardize.LargestFragmentChooser`).
+# 2. **Canonicalize** the surviving fragment (`Chem.MolToSmiles(mol, canonical=True)`).
+# 3. **De-duplicate** on the canonical form and drop rows that fail to parse.
+#
+# Those three steps typically cut the long right-hand tail substantially
+# and make the medians a more honest "typical molecule" number. We skip
+# them here so the demo stays self-contained — but in any serious
+# downstream task (notebooks 07–09), preprocessing comes first, then
+# tokenization.
+
 # 💡 **Key Insight — read the medians, not the means.** Outliers skew the
 # mean, so the median is the better "typical molecule" number.
 #
@@ -446,10 +467,11 @@ plt.show()
 #
 # - A p95 BBBP drug candidate (~107 tokens) costs **(107/23)² ≈ 22×** the
 #   attention work of aspirin *per layer, per molecule*.
-# - The longest BBBP entry (~400+ tokens — a real-world co-crystal SMILES
-#   joined by `.`) costs over **300×** as much.
+# - The longest BBBP entry (~400+ tokens) costs over **300×** as much —
+#   though, as the note above explains, that particular outlier is a
+#   multi-fragment salt and would be cleaned up before training.
 #
-# Those exact numbers will vary slightly between runs of the dataset, but the
+# Exact numbers will vary slightly between runs of the dataset, but the
 # headline is robust: **realistic drug-discovery data already pushes
 # character-level sequences into a range where O(N²) attention starts to hurt
 # meaningfully.** Notebook 02 begins paying that cost down — a subword
