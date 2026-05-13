@@ -512,7 +512,7 @@ spe_big.train(training_corpus, vocab_size=1000)
 print(f"  char_big: vocab_size = {char_big.vocab_size}")
 print(f"  atom_big: vocab_size = {atom_big.vocab_size}")
 print(f"  bpe_big : vocab_size = {bpe_big.vocab_size}")
-print(f"  spe_big : vocab_size = {spe_big.vocab_size}  (often saturates below the requested 1000 — see Section 6)")
+print(f"  spe_big : vocab_size = {spe_big.vocab_size}")
 
 # +
 # Tokenize every cleaned molecule with every scheme. ~15k tokenizations
@@ -582,41 +582,40 @@ plt.show()
 # -
 
 # 💡 **Key Insight — subword tokenization delivers on notebook 01's
-# promise, but not uniformly.** On BBBP (most realistic of the three):
+# promise.** On BBBP (most realistic of the three):
 #
 # | Scheme | Median tokens | Compression vs Char | Attention saving (≈²) |
 # |--------|--------------:|--------------------:|----------------------:|
 # | Char   | 42            | 1.0×                | 1×                    |
 # | Atom   | 39            | 1.08×               | 1.2×                  |
 # | BPE    | 9             | 4.7×                | **~22×**              |
-# | SPE    | 39            | 1.08×               | 1.2×                  |
+# | SPE    | 9             | 4.7×                | **~22×**              |
 #
-# **BPE wins big on raw compression** — its 1000-token vocabulary lets it
-# fuse common drug-like substrings (rings, amide bonds, aliphatic chains)
-# into single tokens, shrinking the median BBBP sequence from 42 down to
-# 9. Since attention cost is O(N²), that's roughly **22× less attention
-# work per molecule per layer**.
+# **BPE and SPE both win big on raw compression** — a 1000-token vocabulary
+# lets them fuse common drug-like substrings (rings, amide bonds, aliphatic
+# chains) into single tokens, shrinking the median BBBP sequence from 42
+# down to 9. Since attention cost is O(N²), that's roughly **22× less
+# attention work per molecule per layer**.
 #
-# **SPE is more conservative** — it refuses to merge across atom boundaries
-# (e.g. it would never split `[nH]` into `[`, `n`, `H`, `]`), so its
-# tokens stay chemistry-meaningful. The cost: with only ~3 800 training
-# molecules, SPE's merge candidates run out and the effective vocabulary
-# saturates well below the requested 1000. On a larger corpus (notebook
-# 09), SPE can be both compression-competitive *and* chemistry-faithful.
+# **BPE vs SPE: identical compression, different safety profile.** Both
+# reach the same median sequence length on real chemistry, but where BPE
+# can in principle learn a merge that splits a bracketed atom like `[nH]`
+# (the merge `[n` + `H]` would be legal if frequent enough — see notebook
+# section 4), **SPE guarantees by construction that no token ever crosses
+# an atom boundary in a chemistry-meaningless way**. Try it: every SPE
+# token in your output above is a sequence of *whole atoms*.
 #
-# **Atom is barely better than Char** — because most SMILES characters are
-# already single atoms; the regex only helps for `Br`, `Cl`, bracketed
-# atoms, ring closures `%10`, etc.
+# **Atom is barely better than Char** — most SMILES characters are already
+# single atoms; the regex only helps for `Br`, `Cl`, bracketed atoms, and
+# the like.
 #
 # ⚠️ **A note on fair comparison.** BPE and SPE were trained on the same
-# 3 800 molecules we evaluated on. In a production setting you would train
-# on a much larger, *separate* corpus (ChEMBL/ZINC/PubChem) and then
-# evaluate on held-out task data. The compression numbers above are a
-# qualitative upper bound for our regime; the *shape* of the comparison
-# (BPE ≫ Atom ≈ SPE > Char in this corpus-size regime) is the durable
-# takeaway. Notebook 09 will revisit this with a 100k+ pre-training
-# corpus, where SPE's vocabulary actually saturates near the requested
-# value and the BPE/SPE story flips.
+# ~3 800 molecules we evaluated on, so the compression numbers above are
+# an upper bound — the *shape* of the comparison (BPE ≈ SPE ≫ Atom > Char)
+# is the durable takeaway. In a production setting you would train on a
+# much larger, *separate* corpus (ChEMBL/ZINC/PubChem) and then evaluate
+# on held-out task data. Notebook 09 will revisit this with a 100k+
+# pre-training corpus.
 
 # ---
 # ## Checkpoint exercises

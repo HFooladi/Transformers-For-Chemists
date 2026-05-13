@@ -354,21 +354,111 @@ class BPETokenizer(_HFTokenizerBackedTokenizer):
 class SmilesPairTokenizer(_HFTokenizerBackedTokenizer):
     """Schwaller-style SMILES-pair tokenizer (notebook 02).
 
-    Same BPE merge algorithm as :class:`BPETokenizer`, but with an atom-regex
-    pre-tokenizer that biases merges to never cross atom boundaries. The
-    resulting vocabulary contains chemically meaningful fragments
-    (``c1ccccc1`` for benzene, ``C(=O)O`` for carboxylic acid, etc.) rather
-    than arbitrary character n-grams.
+    Algorithm (Schwaller et al. 2019):
+
+    1. **Atom-tokenize** each SMILES into a sequence of atom tokens
+       (``Br``, ``[nH]``, ``c``, ``1``, …) using :data:`SMILES_ATOM_REGEX`.
+    2. **Train BPE over those atom sequences**, treating each atom as one
+       indivisible unit. Merge candidates are pairs of *atoms*, so any
+       learned token is automatically a sequence of whole atoms — a
+       bracketed atom like ``[nH]`` can never be split across a token
+       boundary.
+
+    **Implementation note.** HuggingFace ``tokenizers`` operates on Unicode
+    character streams, not on lists of arbitrary tokens. To make BPE see
+    each atom as one indivisible "character", this class maps every unique
+    atom token in the training corpus to a single codepoint in the Unicode
+    Private Use Area (U+E000 onwards), trains BPE on the encoded strings
+    *without* a pre-tokenizer, and decodes each output token's placeholder
+    characters back to atom strings at tokenize/decode time. This is
+    equivalent to the original sentencepiece-based SPE training.
+
+    A naive HF implementation that just sets a ``Split`` pre-tokenizer to
+    the atom regex does **not** work: HF's BPE only merges within
+    pre-tokens, so atom-pre-tokenized BPE never finds cross-atom merges
+    and degenerates into atom-level tokenization.
     """
 
-    def _build_tokenizer(self):
-        from tokenizers import Regex, Tokenizer
-        from tokenizers.models import BPE
-        from tokenizers.pre_tokenizers import Split
+    # Unicode Basic Multilingual Plane Private Use Area: U+E000–U+F8FF,
+    # 6 400 codepoints — plenty for any chemistry vocabulary.
+    _PUA_BASE = 0xE000
+    _PUA_CAPACITY = 0xF8FF - 0xE000 + 1
 
-        tk = Tokenizer(BPE(unk_token="[UNK]"))
-        tk.pre_tokenizer = Split(
-            pattern=Regex(SMILES_ATOM_REGEX),
-            behavior="isolated",
+    def __init__(self) -> None:
+        super().__init__()
+        self._atom_to_char: dict[str, str] = {}
+        self._char_to_atom: dict[str, str] = {}
+
+    def _build_tokenizer(self):
+        # No pre-tokenizer: BPE consumes the placeholder string directly,
+        # which is what lets it learn merges across atom boundaries.
+        from tokenizers import Tokenizer
+        from tokenizers.models import BPE
+
+        return Tokenizer(BPE(unk_token="[UNK]"))
+
+    def _encode_to_placeholders(self, smiles: str) -> str:
+        """Map atom tokens to private-use codepoints. Unknown atoms → ``\\x00`` → ``[UNK]``."""
+        return "".join(self._atom_to_char.get(a, "\x00") for a in atom_tokenize(smiles))
+
+    def _decode_from_placeholders(self, token_string: str) -> str:
+        """Map a BPE token's placeholder characters back to the atom string they encode."""
+        return "".join(self._char_to_atom.get(c, c) for c in token_string)
+
+    def train(self, smiles_corpus: Sequence[str], vocab_size: int = 1000) -> None:
+        from tokenizers.trainers import BpeTrainer
+
+        # Pass 1: discover the atom-token alphabet across the corpus, then
+        # assign each atom a unique placeholder codepoint. Sorted so the
+        # mapping is deterministic across runs.
+        all_atoms: set[str] = set()
+        for smi in smiles_corpus:
+            all_atoms.update(atom_tokenize(smi))
+        if len(all_atoms) > self._PUA_CAPACITY:
+            raise ValueError(
+                f"Corpus has {len(all_atoms)} unique atom tokens but only "
+                f"{self._PUA_CAPACITY} placeholder codepoints are available."
+            )
+        self._atom_to_char = {
+            atom: chr(self._PUA_BASE + i) for i, atom in enumerate(sorted(all_atoms))
+        }
+        self._char_to_atom = {c: a for a, c in self._atom_to_char.items()}
+
+        # Pass 2: encode the corpus to placeholder strings and train BPE.
+        encoded_corpus = [self._encode_to_placeholders(s) for s in smiles_corpus]
+        tk = self._build_tokenizer()
+        trainer = BpeTrainer(
+            vocab_size=vocab_size,
+            special_tokens=list(SPECIAL_TOKENS),
+            initial_alphabet=[],
+            show_progress=False,
         )
-        return tk
+        tk.train_from_iterator(encoded_corpus, trainer=trainer)
+        self._hf = tk
+
+    def tokenize(self, smiles: str) -> List[str]:
+        if self._hf is None:
+            raise RuntimeError("Tokenizer not trained yet — call .train(corpus) first.")
+        raw = self._hf.encode(self._encode_to_placeholders(smiles), add_special_tokens=False).tokens
+        return [self._decode_from_placeholders(t) for t in raw]
+
+    def encode(self, smiles: str, add_special_tokens: bool = False) -> List[int]:
+        if self._hf is None:
+            raise RuntimeError("Tokenizer not trained yet — call .train(corpus) first.")
+        ids = self._hf.encode(self._encode_to_placeholders(smiles), add_special_tokens=False).ids
+        if add_special_tokens:
+            ids = [CLS_ID, *ids, SEP_ID]
+        return ids
+
+    def decode(self, ids: Sequence[int], skip_special_tokens: bool = False) -> str:
+        if self._hf is None:
+            raise RuntimeError("Tokenizer not trained yet — call .train(corpus) first.")
+        out: list[str] = []
+        for idx in ids:
+            tok = self._hf.id_to_token(int(idx))
+            if tok is None:
+                tok = "[UNK]"
+            if skip_special_tokens and tok in SPECIAL_TOKENS:
+                continue
+            out.append(self._decode_from_placeholders(tok))
+        return "".join(out)
