@@ -81,6 +81,7 @@ from utils.smiles_tokenizers import (
     SEP_ID,
     MASK_ID,
 )
+from utils.preprocessing import preprocess_smiles_series
 from utils.tokenization_viz import plot_molecule_with_tokens, plot_token_grid
 # -
 
@@ -410,23 +411,12 @@ from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
 
-def clean_smiles(s):
-    """Parse, keep the largest fragment, return canonical SMILES (or None)."""
-    mol = Chem.MolFromSmiles(s)
-    if mol is None:
-        return None
-    fragments = Chem.GetMolFrags(mol, asMols=True)
-    if len(fragments) > 1:
-        mol = max(fragments, key=lambda m: m.GetNumHeavyAtoms())
-    return Chem.MolToSmiles(mol)
-
-
+# `preprocess_smiles_series` is a tiny helper in `utils/preprocessing.py`
+# that wraps the parse → largest-fragment → canonicalize recipe (also used
+# in notebook 02).
 clean_smiles_by_dataset = {}
 for name, df in dataframes.items():
-    cleaned = df["smiles"].apply(clean_smiles)
-    n_unparseable = int(cleaned.isna().sum())
-    n_multifrag = int(df["smiles"].str.contains(".", regex=False).sum())
-    cleaned = cleaned.dropna().reset_index(drop=True)
+    cleaned, n_unparseable, n_multifrag = preprocess_smiles_series(df["smiles"])
     clean_smiles_by_dataset[name] = cleaned
     print(
         f"  {name}: kept {len(cleaned)}/{len(df)}  "
