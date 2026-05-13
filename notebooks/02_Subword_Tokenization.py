@@ -27,8 +27,9 @@
 # 1. **Atom-level** tokenization — a single regex that respects chemistry.
 # 2. **Byte-Pair Encoding (BPE)** — a learned compression algorithm; the
 #    workhorse of GPT, BERT, and most modern NLP.
-# 3. **SMILES-pair encoding (SPE)** — Schwaller's chemistry-aware variant
-#    that combines BPE's compression with the atom regex's chemical guard.
+# 3. **SMILES-pair encoding (SPE)** — Li & Fourches' chemistry-aware
+#    variant that combines BPE's compression with the atom regex's chemical
+#    guard.
 
 # ## Learning objectives
 #
@@ -318,7 +319,7 @@ print(f"Decoded: {bpe.decode(ids, skip_special_tokens=True)}")
 # ## 4. SMILES-pair encoding (SPE)
 #
 # BPE's only flaw: it doesn't know that `[` and `n` belong together inside
-# `[nH]`. **SMILES-pair encoding** (Schwaller et al., 2019) fixes this by
+# `[nH]`. **SMILES-pair encoding** (Li & Fourches, 2021) fixes this by
 # pre-tokenizing the input with the atom regex *before* running BPE merges.
 # The merge candidates are atom tokens, not characters — so any merged
 # fragment is automatically a sequence of *whole atoms*.
@@ -689,7 +690,10 @@ plt.show()
 # - Sennrich, R. et al. (2016). *Neural Machine Translation of Rare Words
 #   with Subword Units.* — original BPE paper.
 # - Schwaller, P. et al. (2019). *Molecular Transformer: A Model for
-#   Uncertainty-Calibrated Chemical Reaction Prediction.* — introduces
-#   SMILES-pair tokenization.
+#   Uncertainty-Calibrated Chemical Reaction Prediction.* — popularized
+#   the atom-regex tokenization used here for `AtomTokenizer`.
+# - Li, X. & Fourches, D. (2021). *SMILES Pair Encoding: A Data-Driven
+#   Substructure Tokenization Algorithm for Deep Learning.* J. Chem. Inf.
+#   Model. https://doi.org/10.1021/acs.jcim.0c01127 — original SPE paper.
 # - Ross, J. et al. (2022). *MolFormer: Large-Scale Chemical Language
 #   Representations Capture Molecular Structure and Properties.*

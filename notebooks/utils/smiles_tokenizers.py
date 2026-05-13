@@ -9,8 +9,9 @@ This module collects the four tokenization schemes covered in the course:
   cheminformatics.
 * **Byte-Pair Encoding (BPE)** (notebook 02): standard learned subword
   tokenization, trained on a SMILES corpus.
-* **SMILES-pair encoding** (notebook 02): Schwaller-style chemistry-aware
-  variant that biases merges toward chemically meaningful substructures.
+* **SMILES-pair encoding** (notebook 02): chemistry-aware BPE variant
+  (Li & Fourches 2021) that runs BPE merges over atom sequences, so every
+  learned token is a sequence of *whole atoms*.
 
 Each tokenizer exposes the same minimal API (``encode``, ``decode``, ``vocab``)
 so notebooks downstream can swap them with a one-line change. Implementations
@@ -352,9 +353,13 @@ class BPETokenizer(_HFTokenizerBackedTokenizer):
 
 
 class SmilesPairTokenizer(_HFTokenizerBackedTokenizer):
-    """Schwaller-style SMILES-pair tokenizer (notebook 02).
+    """SMILES-pair encoding tokenizer (Li & Fourches 2021, notebook 02).
 
-    Algorithm (Schwaller et al. 2019):
+    Reference: Li, X. & Fourches, D. (2021). *SMILES Pair Encoding: A
+    Data-Driven Substructure Tokenization Algorithm for Deep Learning.*
+    J. Chem. Inf. Model. https://doi.org/10.1021/acs.jcim.0c01127
+
+    Algorithm:
 
     1. **Atom-tokenize** each SMILES into a sequence of atom tokens
        (``Br``, ``[nH]``, ``c``, ``1``, …) using :data:`SMILES_ATOM_REGEX`.

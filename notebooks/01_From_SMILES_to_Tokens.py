@@ -582,7 +582,7 @@ amino_acids = [
 #
 # In **notebook 02** we'll move from character-level to **subword
 # tokenization**: atom-level (regex), Byte-Pair Encoding (BPE), and the
-# chemistry-aware **SMILES-pair encoding** of Schwaller et al. We'll see why
+# chemistry-aware **SMILES-pair encoding** of Li & Fourches. We'll see why
 # subwords give us much shorter, more chemically meaningful token sequences —
 # and then in **notebook 03** we'll start turning those tokens into vectors.
 #
