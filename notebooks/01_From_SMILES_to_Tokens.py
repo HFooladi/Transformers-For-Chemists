@@ -342,9 +342,13 @@ print(f"IDs:     {ids}     (1 = [UNK])")
 #   permeability.
 #
 # All three are part of [MoleculeNet](https://moleculenet.org/) and are tiny
-# (< 1 MB each) to download. Since self-attention is **O(N²)**, the
-# *distribution* of N matters as much as its mean — a single long molecule
-# in a batch dominates the compute and memory for that batch.
+# (< 1 MB each) to download. We will do one round of **minimal preprocessing**
+# first (parse with RDKit, keep the largest organic fragment, canonicalize)
+# so the numbers reflect real molecules rather than salts and counterions,
+# then tokenize and look at the distribution of token counts. Since
+# self-attention is **O(N²)**, the *distribution* of N matters as much as
+# its mean — a single long molecule in a batch dominates the compute and
+# memory for that batch.
 
 # +
 # Download the three CSVs (cached locally; only fetched on first run).
@@ -383,16 +387,63 @@ for name, url in DATASETS.items():
     dataframes[name] = pd.read_csv(path)
     print(f"  {name}: {len(dataframes[name])} molecules")
 
+# Before tokenizing, two cleanup steps that any serious downstream pipeline
+# would do first:
+#
+# 1. **Parse each SMILES with RDKit** and drop the rare row that fails — a
+#    handful of BBBP entries are malformed.
+# 2. **Take the largest organic fragment.** Some rows are co-crystals or
+#    salts written as multi-fragment SMILES joined by `.`
+#    (e.g. `[drug].[Na+].[Cl-]`); a transformer trained on those would
+#    waste capacity modeling counterions. We canonicalize the result so
+#    equivalent SMILES collapse to the same string.
+#
+# What we are **not** doing here (but you should in a production pipeline):
+# tautomer canonicalization, charge normalization, de-duplication, stereo
+# cleanup. See RDKit's `rdMolStandardize` module for the full toolbox.
+
 # +
-# Tokenize each dataset with the SAME `tokenizer` we built in Section 5 —
-# same tool, real data — and gather summary statistics over token counts.
+from rdkit import RDLogger
+
+# Silence RDKit's per-row "could not parse" warnings; we count them
+# explicitly below instead.
+RDLogger.DisableLog("rdApp.*")
+
+
+def clean_smiles(s):
+    """Parse, keep the largest fragment, return canonical SMILES (or None)."""
+    mol = Chem.MolFromSmiles(s)
+    if mol is None:
+        return None
+    fragments = Chem.GetMolFrags(mol, asMols=True)
+    if len(fragments) > 1:
+        mol = max(fragments, key=lambda m: m.GetNumHeavyAtoms())
+    return Chem.MolToSmiles(mol)
+
+
+clean_smiles_by_dataset = {}
+for name, df in dataframes.items():
+    cleaned = df["smiles"].apply(clean_smiles)
+    n_unparseable = int(cleaned.isna().sum())
+    n_multifrag = int(df["smiles"].str.contains(".", regex=False).sum())
+    cleaned = cleaned.dropna().reset_index(drop=True)
+    clean_smiles_by_dataset[name] = cleaned
+    print(
+        f"  {name}: kept {len(cleaned)}/{len(df)}  "
+        f"(dropped {n_unparseable} unparseable; "
+        f"{n_multifrag} were multi-fragment → largest kept)"
+    )
+
+# +
+# Tokenize each *cleaned* dataset with the SAME `tokenizer` we built in
+# Section 5 — same tool, real data — and gather summary statistics.
 def token_lengths(smiles_series):
     return smiles_series.apply(
         lambda s: len(tokenizer.encode(s, add_special_tokens=True))
     )
 
 lengths_by_dataset = {
-    name: token_lengths(df["smiles"]) for name, df in dataframes.items()
+    name: token_lengths(smiles) for name, smiles in clean_smiles_by_dataset.items()
 }
 
 stats = pd.DataFrame(
@@ -432,61 +483,41 @@ fig.tight_layout()
 plt.show()
 # -
 
-# ⚠️ **Note — these datasets are raw, on purpose.** We did *no*
-# preprocessing here: no salt / solvent stripping, no largest-fragment
-# extraction, no canonicalization, no de-duplication. That's why a handful
-# of BBBP entries blow past 400 tokens — those rows are **multi-fragment
-# SMILES joined by `.`** (salts and co-crystals), so we are counting two
-# molecules at once. The numbers above therefore reflect what you would see
-# if you naïvely pointed a character tokenizer at a downloaded CSV.
-#
-# For real training you would normally:
-#
-# 1. Parse each SMILES with RDKit and **keep only the largest organic
-#    fragment** (e.g. `rdkit.Chem.MolStandardize.rdMolStandardize.LargestFragmentChooser`).
-# 2. **Canonicalize** the surviving fragment (`Chem.MolToSmiles(mol, canonical=True)`).
-# 3. **De-duplicate** on the canonical form and drop rows that fail to parse.
-#
-# Those three steps typically cut the long right-hand tail substantially
-# and make the medians a more honest "typical molecule" number. We skip
-# them here so the demo stays self-contained — but in any serious
-# downstream task (notebooks 07–09), preprocessing comes first, then
-# tokenization.
-
 # 💡 **Key Insight — read the medians, not the means.** Outliers skew the
 # mean, so the median is the better "typical molecule" number.
 #
 # - **FreeSolv** typical molecule: ~14 tokens — small organics, shorter than
 #   aspirin.
 # - **ESOL** typical molecule: ~22 tokens — roughly aspirin-sized.
-# - **BBBP** typical molecule: ~47 tokens — *twice as long as aspirin*, and
-#   the top 5% exceed ~107 tokens.
+# - **BBBP** typical molecule: ~42 tokens — *nearly twice as long as
+#   aspirin*, and the top 5% exceed ~100 tokens.
 #
 # Aspirin (Section 5) was 23 tokens. Attention compute scales
 # **quadratically** in sequence length, so:
 #
-# - A p95 BBBP drug candidate (~107 tokens) costs **(107/23)² ≈ 22×** the
+# - A p95 BBBP drug candidate (~101 tokens) costs **(101/23)² ≈ 19×** the
 #   attention work of aspirin *per layer, per molecule*.
-# - The longest BBBP entry (~400+ tokens) costs over **300×** as much —
-#   though, as the note above explains, that particular outlier is a
-#   multi-fragment salt and would be cleaned up before training.
+# - The longest cleaned BBBP entry is ~340 tokens — about **220×** the
+#   attention work of aspirin. That tail is *real* chemistry (large
+#   natural-product-like scaffolds with many fused rings), not the salt
+#   artifact we filtered out in the preprocessing step.
 #
 # Exact numbers will vary slightly between runs of the dataset, but the
 # headline is robust: **realistic drug-discovery data already pushes
-# character-level sequences into a range where O(N²) attention starts to hurt
-# meaningfully.** Notebook 02 begins paying that cost down — a subword
+# character-level sequences into a range where O(N²) attention starts to
+# hurt meaningfully.** Notebook 02 begins paying that cost down — a subword
 # tokenizer trades each character for a *piece* of chemistry, shortening
-# sequences several-fold and giving the model better inductive biases in the
-# process.
+# sequences several-fold and giving the model better inductive biases in
+# the process.
 
-# 🔬 **Try This.** Pull the longest molecule out of BBBP and look at its
-# tokens — how many of them are bare aromatic carbons (`c`) inside a ring?
-# A starting snippet:
+# 🔬 **Try This.** Pull the longest molecule out of (cleaned) BBBP and look
+# at its tokens — how many of them are bare aromatic carbons (`c`) inside a
+# ring? A starting snippet:
 #
 # ```python
 # bbbp_lengths = lengths_by_dataset["BBBP"]
-# longest_smi  = dataframes["BBBP"].loc[bbbp_lengths.idxmax(), "smiles"]
-# print(f"Longest BBBP SMILES ({bbbp_lengths.max()} tokens):")
+# longest_smi  = clean_smiles_by_dataset["BBBP"].loc[bbbp_lengths.idxmax()]
+# print(f"Longest cleaned BBBP SMILES ({bbbp_lengths.max()} tokens):")
 # print(longest_smi)
 # print("Tokens:", tokenizer.tokenize(longest_smi))
 # ```
