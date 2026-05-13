@@ -329,6 +329,150 @@ print(f"IDs:     {ids}     (1 = [UNK])")
 # tokens, dramatically shortening the sequence and giving the model better
 # inductive biases for chemistry.
 
+# ### 🔬 Sense of scale: how long do real molecules actually get?
+#
+# We've claimed character-level tokenization produces "long" sequences — but
+# how long is "long" on real data? Let's tokenize three small, widely-used
+# chemistry datasets and look at the actual distribution of token counts:
+#
+# - **FreeSolv** (≈ 640 molecules) — small organic solutes with hydration
+#   free energies.
+# - **ESOL** (≈ 1,128) — drug-like organics labeled with water solubility.
+# - **BBBP** (≈ 2,050) — drug candidates labeled for blood-brain-barrier
+#   permeability.
+#
+# All three are part of [MoleculeNet](https://moleculenet.org/) and are tiny
+# (< 1 MB each) to download. Since self-attention is **O(N²)**, the
+# *distribution* of N matters as much as its mean — a single long molecule
+# in a batch dominates the compute and memory for that batch.
+
+# +
+# Download the three CSVs (cached locally; only fetched on first run).
+import urllib.request
+from pathlib import Path
+
+import pandas as pd
+
+# Cache under notebooks/data/moleculenet, falling back gracefully if the
+# notebook is run from an unusual working directory.
+_candidates = [
+    "notebooks/data",
+    "Transformers-For-Chemists/notebooks/data",
+    "../notebooks/data",
+]
+_data_root = next(
+    (Path(p) for p in _candidates if Path(p).exists()),
+    Path("notebooks/data"),
+)
+DATA_DIR = _data_root / "moleculenet"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+_BASE = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets"
+DATASETS = {
+    "FreeSolv": f"{_BASE}/SAMPL.csv",
+    "ESOL":     f"{_BASE}/delaney-processed.csv",
+    "BBBP":     f"{_BASE}/BBBP.csv",
+}
+
+dataframes = {}
+for name, url in DATASETS.items():
+    path = DATA_DIR / f"{name}.csv"
+    if not path.exists():
+        print(f"Downloading {name} -> {path}")
+        urllib.request.urlretrieve(url, path)
+    dataframes[name] = pd.read_csv(path)
+    print(f"  {name}: {len(dataframes[name])} molecules")
+
+# +
+# Tokenize each dataset with the SAME `tokenizer` we built in Section 5 —
+# same tool, real data — and gather summary statistics over token counts.
+def token_lengths(smiles_series):
+    return smiles_series.apply(
+        lambda s: len(tokenizer.encode(s, add_special_tokens=True))
+    )
+
+lengths_by_dataset = {
+    name: token_lengths(df["smiles"]) for name, df in dataframes.items()
+}
+
+stats = pd.DataFrame(
+    {
+        "n":      [len(L) for L in lengths_by_dataset.values()],
+        "mean":   [round(L.mean(), 1) for L in lengths_by_dataset.values()],
+        "median": [int(L.median()) for L in lengths_by_dataset.values()],
+        "p95":    [int(L.quantile(0.95)) for L in lengths_by_dataset.values()],
+        "max":    [int(L.max()) for L in lengths_by_dataset.values()],
+    },
+    index=list(lengths_by_dataset.keys()),
+)
+stats.index.name = "dataset"
+stats
+
+# +
+# Overlay the three distributions on a single axis so the rightward shift
+# from small organics to real drug candidates is obvious at a glance.
+fig, ax = plt.subplots(figsize=(8, 4.5))
+colors = {"FreeSolv": "#4C72B0", "ESOL": "#DD8452", "BBBP": "#55A868"}
+
+max_len = max(L.max() for L in lengths_by_dataset.values())
+bins = range(0, int(max_len) + 5, 5)  # 5-token bins
+
+for name, lengths in lengths_by_dataset.items():
+    ax.hist(
+        lengths, bins=bins, alpha=0.55, color=colors[name],
+        label=f"{name} (n={len(lengths)})",
+    )
+    ax.axvline(lengths.median(), color=colors[name], linestyle="--", linewidth=1.2)
+
+ax.set_xlabel("Tokens per SMILES (including [CLS] / [SEP])")
+ax.set_ylabel("Number of molecules")
+ax.set_title("Character-level token counts on real molecules")
+ax.legend()
+fig.tight_layout()
+plt.show()
+# -
+
+# 💡 **Key Insight — read the medians, not the means.** Outliers skew the
+# mean, so the median is the better "typical molecule" number.
+#
+# - **FreeSolv** typical molecule: ~14 tokens — small organics, shorter than
+#   aspirin.
+# - **ESOL** typical molecule: ~22 tokens — roughly aspirin-sized.
+# - **BBBP** typical molecule: ~47 tokens — *twice as long as aspirin*, and
+#   the top 5% exceed ~107 tokens.
+#
+# Aspirin (Section 5) was 23 tokens. Attention compute scales
+# **quadratically** in sequence length, so:
+#
+# - A p95 BBBP drug candidate (~107 tokens) costs **(107/23)² ≈ 22×** the
+#   attention work of aspirin *per layer, per molecule*.
+# - The longest BBBP entry (~400+ tokens — a real-world co-crystal SMILES
+#   joined by `.`) costs over **300×** as much.
+#
+# Those exact numbers will vary slightly between runs of the dataset, but the
+# headline is robust: **realistic drug-discovery data already pushes
+# character-level sequences into a range where O(N²) attention starts to hurt
+# meaningfully.** Notebook 02 begins paying that cost down — a subword
+# tokenizer trades each character for a *piece* of chemistry, shortening
+# sequences several-fold and giving the model better inductive biases in the
+# process.
+
+# 🔬 **Try This.** Pull the longest molecule out of BBBP and look at its
+# tokens — how many of them are bare aromatic carbons (`c`) inside a ring?
+# A starting snippet:
+#
+# ```python
+# bbbp_lengths = lengths_by_dataset["BBBP"]
+# longest_smi  = dataframes["BBBP"].loc[bbbp_lengths.idxmax(), "smiles"]
+# print(f"Longest BBBP SMILES ({bbbp_lengths.max()} tokens):")
+# print(longest_smi)
+# print("Tokens:", tokenizer.tokenize(longest_smi))
+# ```
+#
+# Notebook 02's BPE will collapse common runs like `c1ccccc1` (benzene) and
+# other recurring substructures into single tokens — often compressing such
+# SMILES by 2–4× and meaningfully cutting the attention bill.
+
 # ---
 # ## Checkpoint exercises
 #

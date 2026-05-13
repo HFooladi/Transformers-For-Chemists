@@ -109,6 +109,9 @@ notebooks/data/zinc/*.csv
 notebooks/data/zinc/*.smi
 notebooks/data/qm9/raw/
 notebooks/data/qm9/processed/
+notebooks/data/moleculenet/*.csv
+notebooks/data/moleculenet/*.smi
+notebooks/data/moleculenet/*.txt
 
 # Trained model weights (large; distributed via release artifacts)
 *.pt

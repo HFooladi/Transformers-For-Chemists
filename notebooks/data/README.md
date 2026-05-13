@@ -6,5 +6,5 @@ Datasets used in the notebook series. Small files (subsets, splits, indices) are
 
 - `chembl/` — small ChEMBL SMILES subset for MLM pre-training (notebook 09)
 - `zinc/` — small ZINC SMILES subset, alternate pre-training corpus
-- `moleculenet/` — ESOL, BACE, BBBP, FreeSolv splits for fine-tuning
+- `moleculenet/` — raw CSVs (ESOL, BACE, BBBP, FreeSolv) used for the empirical token-length demo in notebook 01 and for fine-tuning in notebook 07. Downloaded on demand from the DeepChem S3 mirror.
 - `qm9/` — QM9 SMILES + targets, also used by the cross-repo GNN comparison (notebook 09.1)
