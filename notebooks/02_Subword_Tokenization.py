@@ -290,7 +290,7 @@ for step in range(1, 5):
 
 # +
 bpe = BPETokenizer()
-bpe.train(CORPUS, vocab_size=200)
+bpe.train(CORPUS, vocab_size=100)
 print(f"BPE vocab size: {bpe.vocab_size}")
 
 print("\nA few aspirin/caffeine/ibuprofen tokenizations:")
@@ -312,7 +312,7 @@ print(f"Decoded: {bpe.decode(ids, skip_special_tokens=True)}")
 
 # 🔬 **Try This.** Look at the BPE tokens for aspirin. Do they include
 # `c1ccccc1` (benzene) as a single token? Do they include `C(=O)O`
-# (carboxylic acid)? With our small 60-molecule corpus and vocab of 200, BPE
+# (carboxylic acid)? With our small 61-molecule corpus and vocab of 100, BPE
 # can already find a handful of meaningful chunks — and it gets dramatically
 # better with real corpora (notebook 09 uses 100k+ SMILES).
 
@@ -326,7 +326,7 @@ print(f"Decoded: {bpe.decode(ids, skip_special_tokens=True)}")
 
 # +
 spe = SmilesPairTokenizer()
-spe.train(CORPUS, vocab_size=200)
+spe.train(CORPUS, vocab_size=100)
 print(f"SPE vocab size: {spe.vocab_size}")
 
 # The same molecules, now tokenized chemically.
@@ -407,11 +407,22 @@ ax.grid(alpha=0.3)
 plt.show()
 # -
 
-# ⚠️ **Note.** The shape of this curve is what matters; the absolute numbers
-# depend heavily on corpus size. With our 60-molecule toy corpus, BPE
-# saturates fast because there aren't many distinct adjacent pairs to merge.
-# On a real 100k-molecule corpus (notebook 09), the average sequence length
-# can drop by **5–10×** with a 1000-token vocabulary.
+# ⚠️ **Limitation: tokenizer overfitting on tiny corpora.** The shape of
+# this curve is what matters; the absolute numbers depend heavily on
+# corpus size. With our 61-molecule toy corpus, BPE runs out of
+# cross-molecule patterns to merge once the vocabulary grows past ~100
+# and starts memorizing whole training SMILES as private tokens. At
+# `vocab_size = 300` the trainer hits a hard ceiling at 246 tokens and
+# **each of the 61 training molecules collapses to exactly one token** —
+# that's not learning, it's a lookup table. This is why we kept
+# `vocab_size = 100` for both BPE and SPE earlier: small enough to stay
+# in the honest subword regime, where learned tokens are still
+# recognizable substructures (`c1ccccc1`, `C(=O)O`, `[nH]`) rather than
+# memorized molecules. Real chemistry tokenizers (ChemBERTa: 77 M SMILES;
+# MolFormer: 1.1 B) need enormous corpora precisely so the merges
+# represent genuinely reusable substructures. On a real 100 k-molecule
+# corpus (notebook 09), a 1000-token vocabulary cuts average sequence
+# length by **5–10×** *and* the merges remain meaningful.
 
 # ## 7. Why this matters for the transformer
 #
@@ -436,7 +447,7 @@ plt.show()
 # tokenization schemes and comparing the distributions of token counts.
 #
 # **One important caveat first.** The `bpe` and `spe` tokenizers trained
-# earlier in this notebook only saw the 65-molecule toy corpus — their
+# earlier in this notebook only saw the 61-molecule toy corpus — their
 # vocabularies are far too small to fairly handle ~3 800 real drug
 # candidates. We will therefore train a fresh pair of BPE and SPE
 # tokenizers on the *cleaned* MoleculeNet data itself (under the names
