@@ -74,7 +74,7 @@ for p in (f"{REPO_NAME}/notebooks", "notebooks", ".", ".."):
 
 from utils.colab_setup import ensure_environment
 
-ensure_environment(["rdkit", "matplotlib", "tokenizers"])
+ensure_environment(["rdkit", "matplotlib", "tokenizers", "mols2grid"])
 
 # +
 from collections import Counter
@@ -540,6 +540,79 @@ print("If a molecule's BPE tokenization contains this token, does the molecule")
 print("actually contain the corresponding chemical substructure?")
 print(pd.DataFrame(ver_rows).to_string(index=False))
 # -
+
+# **See it, don't just count it.** The table above says "100 % of
+# molecules tokenized with `c1ccccc1` actually contain a benzene ring."
+# That number is more convincing when you can scroll through the
+# molecules and watch the highlighted substructure light up in each
+# one. The `mols2grid` package renders RDKit molecules as a paginated
+# image grid; if we pre-mark each molecule's atom indices that match
+# the SMARTS, mols2grid will highlight them automatically.
+
+# +
+import mols2grid
+from IPython.display import display as ip_display
+
+
+def mols_with_highlight(token: str, n: int = 8) -> pd.DataFrame:
+    """Find up to ``n`` corpus molecules containing the SMARTS ``token``,
+    with the matching atom indices stored on each mol so that mols2grid
+    will draw them highlighted.
+
+    Returns a DataFrame with columns ``mol`` and ``SMILES`` ready to be
+    passed to ``mols2grid.display(df, mol_col="mol", ...)``.
+    """
+    pattern = Chem.MolFromSmarts(token)
+    if pattern is None:
+        return pd.DataFrame()
+    rows = []
+    for s in UNION:
+        if len(rows) >= n:
+            break
+        mol = Chem.MolFromSmiles(s)
+        if mol is None:
+            continue
+        match = mol.GetSubstructMatch(pattern)
+        if match:
+            # mols2grid reads this private attribute and passes the indices
+            # straight to RDKit's DrawMolecule(highlightAtoms=...). See
+            # mols2grid/molgrid.py:266-271.
+            mol.__sssAtoms = list(match)
+            rows.append({"mol": mol, "SMILES": s})
+    return pd.DataFrame(rows)
+
+
+# Four interpretable tokens, one mini-grid each.
+for tok in ["c1ccccc1", "C(=O)O", "C(=O)N", "[nH]"]:
+    df_mols = mols_with_highlight(tok, n=8)
+    if df_mols.empty:
+        print(f"  no matches for token {tok!r}")
+        continue
+    print(f"BPE token {tok!r} highlighted in {len(df_mols)} example molecules:")
+    ip_display(mols2grid.display(
+        df_mols,
+        mol_col="mol",
+        smiles_col="SMILES",
+        template="static",
+        n_cols=4,
+        size=(180, 140),
+        prerender=True,
+        subset=["img", "SMILES"],
+        border="1px solid #cccccc",
+    ))
+# -
+
+# 🧪 **Chemical Intuition.** Each highlighted region in the grid above
+# is the substructure that the BPE token was *named after*. For
+# `c1ccccc1` you should see a six-membered aromatic ring lit up in every
+# molecule — even when the ring is fused to another ring, BPE still
+# matches it. For `C(=O)N`, the amide carbonyl-plus-nitrogen lights up.
+# This is the payoff: **a single BPE token ID, when handed to the model,
+# corresponds to a coherent piece of chemistry that a chemist would
+# recognize on sight.** That correspondence is what makes attention
+# heads downstream interpretable — when a head attends to one BPE token
+# from another, it is attending across a chemical relationship, not
+# just across two raw characters.
 
 # 💡 **Key Insight.** A token like `c1ccccc1` shows up in roughly 200
 # molecules in our corpus, and **every one of those molecules contains an
