@@ -159,8 +159,19 @@ class CharTokenizer:
             real tokens and 0 for ``[PAD]`` positions.
         """
         encoded = [self.encode(s, add_special_tokens=add_special_tokens) for s in smiles_list]
+        if not encoded:
+            return [], []
         if max_length is not None:
-            encoded = [seq[:max_length] for seq in encoded]
+            truncated = []
+            for seq in encoded:
+                if len(seq) > max_length:
+                    seq = seq[:max_length]
+                    # Truncation can chop the trailing [SEP]; restore it so the
+                    # [CLS] ... [SEP] framing survives. [CLS] at index 0 is kept.
+                    if add_special_tokens and seq:
+                        seq[-1] = SEP_ID
+                truncated.append(seq)
+            encoded = truncated
         target_len = max(len(seq) for seq in encoded)
         input_ids = [seq + [PAD_ID] * (target_len - len(seq)) for seq in encoded]
         attention_mask = [[1] * len(seq) + [0] * (target_len - len(seq)) for seq in encoded]
@@ -171,11 +182,25 @@ def atom_tokenize(smiles: str) -> List[str]:
     """Split a SMILES string into atom-level tokens via :data:`SMILES_ATOM_REGEX`.
 
     Multi-character atoms (``Br``, ``Cl``), bracketed atoms (``[nH]``,
-    ``[O-]``), bonds, and ring closures each become single tokens. Anything
-    the regex doesn't match (e.g. whitespace) is dropped silently — pass
-    canonical SMILES.
+    ``[O-]``), bonds, and ring closures each become single tokens.
+
+    Characters the regex doesn't match are handled deliberately rather than
+    dropped: whitespace is discarded (SMILES never legitimately contains it),
+    while any other unmatched character is emitted as its own single-character
+    token. That keeps a malformed input visible — such tokens map to ``[UNK]``
+    downstream in :class:`AtomTokenizer` and :class:`SmilesPairTokenizer`
+    instead of silently vanishing and corrupting the molecule.
     """
-    return _ATOM_PATTERN.findall(smiles)
+    tokens: List[str] = []
+    pos = 0
+    for m in _ATOM_PATTERN.finditer(smiles):
+        # Anything between the previous match and this one is unmatched.
+        tokens.extend(ch for ch in smiles[pos:m.start()] if not ch.isspace())
+        tokens.append(m.group())
+        pos = m.end()
+    # Trailing unmatched characters after the final match.
+    tokens.extend(ch for ch in smiles[pos:] if not ch.isspace())
+    return tokens
 
 
 class AtomTokenizer:
@@ -241,8 +266,19 @@ class AtomTokenizer:
         max_length: int | None = None,
     ) -> tuple[list[list[int]], list[list[int]]]:
         encoded = [self.encode(s, add_special_tokens=add_special_tokens) for s in smiles_list]
+        if not encoded:
+            return [], []
         if max_length is not None:
-            encoded = [seq[:max_length] for seq in encoded]
+            truncated = []
+            for seq in encoded:
+                if len(seq) > max_length:
+                    seq = seq[:max_length]
+                    # Truncation can chop the trailing [SEP]; restore it so the
+                    # [CLS] ... [SEP] framing survives. [CLS] at index 0 is kept.
+                    if add_special_tokens and seq:
+                        seq[-1] = SEP_ID
+                truncated.append(seq)
+            encoded = truncated
         target_len = max(len(seq) for seq in encoded)
         input_ids = [seq + [PAD_ID] * (target_len - len(seq)) for seq in encoded]
         attention_mask = [[1] * len(seq) + [0] * (target_len - len(seq)) for seq in encoded]
@@ -328,8 +364,19 @@ class _HFTokenizerBackedTokenizer:
         max_length: int | None = None,
     ) -> tuple[list[list[int]], list[list[int]]]:
         encoded = [self.encode(s, add_special_tokens=add_special_tokens) for s in smiles_list]
+        if not encoded:
+            return [], []
         if max_length is not None:
-            encoded = [seq[:max_length] for seq in encoded]
+            truncated = []
+            for seq in encoded:
+                if len(seq) > max_length:
+                    seq = seq[:max_length]
+                    # Truncation can chop the trailing [SEP]; restore it so the
+                    # [CLS] ... [SEP] framing survives. [CLS] at index 0 is kept.
+                    if add_special_tokens and seq:
+                        seq[-1] = SEP_ID
+                truncated.append(seq)
+            encoded = truncated
         target_len = max(len(seq) for seq in encoded)
         input_ids = [seq + [PAD_ID] * (target_len - len(seq)) for seq in encoded]
         attention_mask = [[1] * len(seq) + [0] * (target_len - len(seq)) for seq in encoded]
