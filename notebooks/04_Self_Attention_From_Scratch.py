@@ -535,8 +535,9 @@ plt.show()
 #
 # 📚 **Deep-dive sub-series**
 # - **04.1**: Linear attention — MolFormer's `O(N)` swap for `softmax(QKᵀ)V`.
-# - **04.2**: Rotary position embeddings (RoPE) — folding position into Q/K.
-# - **04.3**: Other position encodings (ALiBi, relative-position bias).
+# - **04.2**: Performer / FAVOR+ — the feature map MolFormer actually uses.
+# - **04.3**: Rotary position embeddings (RoPE) — folding position into Q/K.
+# - **04.4**: Other position encodings (ALiBi, relative-position bias).
 #
 # 📚 **References.**
 # - Bahdanau, D. et al. (2015). *Neural Machine Translation by Jointly

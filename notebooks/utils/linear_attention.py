@@ -23,7 +23,7 @@ which costs ``O(L · d²)`` per molecule instead of ``O(L² · d)`` because the
 two sums over keys/values can be precomputed *once* and reused for every
 query. MolFormer in production uses a Performer-style FAVOR+ feature map
 instead of ELU+1; that variant gets its own supplementary notebook
-(``04_1_FAVOR_Performer.ipynb``).
+(``04_2_FAVOR_Performer.ipynb``).
 """
 
 from __future__ import annotations

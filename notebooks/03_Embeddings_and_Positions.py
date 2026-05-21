@@ -392,7 +392,7 @@ plt.show()
 #
 # In this course we use sinusoidal PE for the core sequence (it's
 # parameter-free and the math is transparent), and revisit position
-# encoding as a deep-dive in notebooks 04.2 (RoPE) and 04.3 (ALiBi,
+# encoding as a deep-dive in notebooks 04.3 (RoPE) and 04.4 (ALiBi,
 # relative-position attention).
 #
 # ⚠️ **Note.** A common misconception: "sinusoidal PE *gives* the model a

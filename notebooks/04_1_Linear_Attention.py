@@ -251,7 +251,7 @@ plt.show()
 # map (Choromanski et al., 2021) that approximates softmax more closely. We
 # stick with ELU+1 for pedagogy — it is five lines of PyTorch and shares the
 # same `O(L)` complexity. The Performer version gets its own supplementary
-# notebook (`04_1_FAVOR_Performer.ipynb`).
+# notebook (`04_2_FAVOR_Performer.ipynb`).
 
 xs = torch.linspace(-3, 3, 200)
 fig, ax = plt.subplots(figsize=(6, 4))
@@ -640,7 +640,7 @@ print(f"linear   final loss: {np.mean(linear_losses[-20:]):.3f}")
 # approximate* the softmax kernel — so the linear-attention output is
 # (up to noise) the same function softmax would compute, at `O(L)` cost.
 # FAVOR+ has more moving parts than ELU+1, hence its own supplementary
-# notebook **`04_1_FAVOR_Performer.ipynb`**. The `O(L)` *complexity story*
+# notebook **`04_2_FAVOR_Performer.ipynb`**. The `O(L)` *complexity story*
 # you just learned is identical; only the choice of `φ` changes.
 
 # ---
@@ -742,7 +742,7 @@ print(f"linear   final loss: {np.mean(linear_losses[-20:]):.3f}")
 # ## What's next
 #
 # You now have the second of MolFormer's three big architectural choices.
-# **Notebook 04.2** covers the third — **rotary position embeddings (RoPE)**,
+# **Notebook 04.3** covers the third — **rotary position embeddings (RoPE)**,
 # which fold position information directly into `Q` and `K` and pair
 # naturally with linear attention (the kernel-trick math still goes
 # through). **Notebook 09** puts attention, RoPE, and MLM together into a
@@ -750,10 +750,10 @@ print(f"linear   final loss: {np.mean(linear_losses[-20:]):.3f}")
 #
 # 📚 **Deep-dive sub-series**
 # - **04.1 (this notebook)** — Linear attention with ELU+1.
-# - **04_1_FAVOR_Performer** — *coming soon.* The Performer-style feature
-#   map MolFormer actually uses.
-# - **04.2** — Rotary position embeddings (RoPE).
-# - **04.3** — Other position encodings (ALiBi, relative-position bias).
+# - **04.2** — *coming soon.* The Performer-style FAVOR+ feature map
+#   MolFormer actually uses.
+# - **04.3** — Rotary position embeddings (RoPE).
+# - **04.4** — Other position encodings (ALiBi, relative-position bias).
 #
 # 📚 **References.**
 # - Katharopoulos, A. et al. (2020). *Transformers are RNNs: Fast

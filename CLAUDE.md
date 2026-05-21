@@ -56,8 +56,9 @@ There is intentionally **no top-level `requirements.txt`** — each notebook ins
 ### Sub-series (0X.Y notebooks)
 - **02.1**: How tokenization choice affects downstream property prediction
 - **04.1**: Linear attention (MolFormer's choice)
-- **04.2**: Rotary position embeddings (RoPE)
-- **04.3**: Other position encodings (ALiBi, relative position)
+- **04.2**: Performer / FAVOR+ feature map (MolFormer's actual attention)
+- **04.3**: Rotary position embeddings (RoPE)
+- **04.4**: Other position encodings (ALiBi, relative position)
 - **08.1**: Empirical study of MLM masking ratios
 - **09.1**: GNN vs encoder-transformer head-to-head on MoleculeNet
 

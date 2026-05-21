@@ -51,9 +51,9 @@ These notebooks (02.1, 04.1, ...) provide **additional details and advanced topi
 | -------- | ----------- | -------------- | ---- |
 | 02_1_Tokenization_Effect.ipynb | How tokenizer choice changes downstream performance | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/02_1_Tokenization_Effect.ipynb) | 2026 |
 | 04_1_Linear_Attention.ipynb | O(N) attention (the MolFormer choice) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/04_1_Linear_Attention.ipynb) | 2026 |
-| 04_1_FAVOR_Performer.ipynb | The Performer feature map MolFormer actually uses | _coming soon_ | 2026 |
-| 04_2_Rotary_Position_Embeddings.ipynb | RoPE intuition and implementation | _coming soon_ | 2026 |
-| 04_3_Other_Position_Encodings.ipynb | ALiBi and relative-position encodings | _coming soon_ | 2026 |
+| 04_2_FAVOR_Performer.ipynb | The Performer feature map MolFormer actually uses | _coming soon_ | 2026 |
+| 04_3_Rotary_Position_Embeddings.ipynb | RoPE intuition and implementation | _coming soon_ | 2026 |
+| 04_4_Other_Position_Encodings.ipynb | ALiBi and relative-position encodings | _coming soon_ | 2026 |
 | 08_1_Masking_Ratio_Study.ipynb | Empirical sweep of MLM masking ratios | _coming soon_ | 2026 |
 | 09_1_GNN_vs_Transformer.ipynb | Head-to-head comparison on MoleculeNet tasks | _coming soon_ | 2026 |
 

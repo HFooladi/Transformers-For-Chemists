@@ -13,9 +13,9 @@
 #     name: python3
 # ---
 
-# <a href="https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/04_1_FAVOR_Performer.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+# <a href="https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/04_2_FAVOR_Performer.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 #
-# # 04.1 (supplement) · FAVOR+ — the Performer feature map MolFormer actually uses
+# # 04.2 · FAVOR+ — the Performer feature map MolFormer actually uses
 #
 # 🚧 **Coming soon.**
 #
