@@ -591,6 +591,44 @@ ax.legend()
 ax.grid(axis="y", alpha=0.3)
 fig.tight_layout()
 plt.show()
+
+# +
+# Distribution view: for each dataset, overlay the *full histogram* of
+# token counts under Atom vs SPE. The bar chart above collapsed each
+# distribution to its median; here we see the spread too. The std is
+# what actually controls batch-padding cost and the longest sequence
+# the model has to handle, so two tokenizers with the same median can
+# still differ a lot in practice.
+fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+
+for ax, ds in zip(axes, clean_smiles_by_dataset.keys()):
+    atom_lens = token_lengths(atom_big, clean_smiles_by_dataset[ds])
+    spe_lens  = token_lengths(spe_big,  clean_smiles_by_dataset[ds])
+
+    # Shared bins within a panel so the two histograms are directly
+    # comparable — and so SPE's compression is visually obvious.
+    lo = int(min(atom_lens.min(), spe_lens.min()))
+    hi = int(max(atom_lens.max(), spe_lens.max()))
+    bins = np.linspace(lo, hi, 25)
+
+    ax.hist(atom_lens, bins=bins, alpha=0.55, color=colors["Atom"],
+            label=f"Atom  (μ={atom_lens.mean():.1f}, σ={atom_lens.std():.1f})")
+    ax.hist(spe_lens,  bins=bins, alpha=0.55, color=colors["SPE"],
+            label=f"SPE   (μ={spe_lens.mean():.1f}, σ={spe_lens.std():.1f})")
+
+    # Median lines tie this view back to the bar chart above.
+    ax.axvline(atom_lens.median(), color=colors["Atom"], linestyle="--", linewidth=1)
+    ax.axvline(spe_lens.median(),  color=colors["SPE"],  linestyle="--", linewidth=1)
+
+    ax.set_title(f"{ds}  (n={len(atom_lens)})")
+    ax.set_xlabel("Tokens per molecule")
+    ax.legend(fontsize=8, loc="upper right")
+    ax.grid(axis="y", alpha=0.3)
+
+axes[0].set_ylabel("Number of molecules")
+fig.suptitle("Token-count distribution per dataset: Atom vs SPE", y=1.02)
+fig.tight_layout()
+plt.show()
 # -
 
 # 💡 **Key Insight — subword tokenization delivers on notebook 01's
