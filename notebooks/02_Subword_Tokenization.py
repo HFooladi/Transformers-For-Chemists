@@ -593,40 +593,48 @@ fig.tight_layout()
 plt.show()
 
 # +
-# Distribution view: for each dataset, overlay the *full histogram* of
-# token counts under Atom vs SPE. The bar chart above collapsed each
-# distribution to its median; here we see the spread too. The std is
-# what actually controls batch-padding cost and the longest sequence
-# the model has to handle, so two tokenizers with the same median can
-# still differ a lot in practice.
-fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+# Distribution view: one violin per (dataset, tokenizer) on a shared
+# y-axis. This makes three things visible in a single panel:
+#   1. Within a dataset: how much more SPE compresses than Atom.
+#   2. Across datasets: BBBP molecules are bigger than ESOL/FreeSolv.
+#   3. The full spread (σ) per group, not just the median — which is
+#      what actually controls batch-padding cost and the longest
+#      sequence the model has to handle.
+from matplotlib.patches import Patch
 
-for ax, ds in zip(axes, clean_smiles_by_dataset.keys()):
-    atom_lens = token_lengths(atom_big, clean_smiles_by_dataset[ds])
-    spe_lens  = token_lengths(spe_big,  clean_smiles_by_dataset[ds])
+fig, ax = plt.subplots(figsize=(8.5, 5))
 
-    # Shared bins within a panel so the two histograms are directly
-    # comparable — and so SPE's compression is visually obvious.
-    lo = int(min(atom_lens.min(), spe_lens.min()))
-    hi = int(max(atom_lens.max(), spe_lens.max()))
-    bins = np.linspace(lo, hi, 25)
+dataset_names = list(clean_smiles_by_dataset.keys())
+atom_data = [token_lengths(atom_big, clean_smiles_by_dataset[ds]).values
+             for ds in dataset_names]
+spe_data  = [token_lengths(spe_big,  clean_smiles_by_dataset[ds]).values
+             for ds in dataset_names]
 
-    ax.hist(atom_lens, bins=bins, alpha=0.55, color=colors["Atom"],
-            label=f"Atom  (μ={atom_lens.mean():.1f}, σ={atom_lens.std():.1f})")
-    ax.hist(spe_lens,  bins=bins, alpha=0.55, color=colors["SPE"],
-            label=f"SPE   (μ={spe_lens.mean():.1f}, σ={spe_lens.std():.1f})")
+positions = np.arange(len(dataset_names))
+vp_atom = ax.violinplot(atom_data, positions=positions - 0.2, widths=0.35,
+                        showmedians=True, showextrema=True)
+vp_spe  = ax.violinplot(spe_data,  positions=positions + 0.2, widths=0.35,
+                        showmedians=True, showextrema=True)
 
-    # Median lines tie this view back to the bar chart above.
-    ax.axvline(atom_lens.median(), color=colors["Atom"], linestyle="--", linewidth=1)
-    ax.axvline(spe_lens.median(),  color=colors["SPE"],  linestyle="--", linewidth=1)
+# Color the violin bodies by tokenizer.
+for body in vp_atom["bodies"]:
+    body.set_facecolor(colors["Atom"]); body.set_edgecolor("black"); body.set_alpha(0.7)
+for body in vp_spe["bodies"]:
+    body.set_facecolor(colors["SPE"]);  body.set_edgecolor("black"); body.set_alpha(0.7)
+# Darken the median/extrema lines so they're readable on the colored bodies.
+for vp in (vp_atom, vp_spe):
+    for part in ("cbars", "cmins", "cmaxes", "cmedians"):
+        vp[part].set_edgecolor("black"); vp[part].set_linewidth(1.0)
 
-    ax.set_title(f"{ds}  (n={len(atom_lens)})")
-    ax.set_xlabel("Tokens per molecule")
-    ax.legend(fontsize=8, loc="upper right")
-    ax.grid(axis="y", alpha=0.3)
-
-axes[0].set_ylabel("Number of molecules")
-fig.suptitle("Token-count distribution per dataset: Atom vs SPE", y=1.02)
+ax.set_xticks(positions)
+ax.set_xticklabels([f"{ds}\n(n={len(d)})" for ds, d in zip(dataset_names, atom_data)])
+ax.set_ylabel("Tokens per molecule")
+ax.set_title("Token-count distribution per dataset: Atom vs SPE")
+ax.grid(axis="y", alpha=0.3)
+ax.legend(handles=[
+    Patch(facecolor=colors["Atom"], edgecolor="black", alpha=0.7, label="Atom"),
+    Patch(facecolor=colors["SPE"],  edgecolor="black", alpha=0.7, label="SPE"),
+])
 fig.tight_layout()
 plt.show()
 # -
