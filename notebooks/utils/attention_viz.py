@@ -264,17 +264,197 @@ def plot_attention_on_smiles(
 
 
 def plot_per_head_grid(
-    attention: "np.ndarray",
+    attention,
     tokens: Sequence[str],
     n_cols: int = 4,
+    title: str | None = None,
+    cmap: str = "Blues",
+    panel_size: float = 3.0,
+    fontsize: int = 6,
 ):
-    """Small-multiples grid: one heatmap per attention head."""
-    raise NotImplementedError("Phase 3: implement in notebook 05.")
+    """Small-multiples grid: one heatmap per attention head.
+
+    Multi-head attention (notebook 05) produces one ``(L, L)`` pattern per head.
+    Laying them out side by side makes head *specialization* visible at a
+    glance — each head attends differently. All panels share a single colour
+    scale (``vmin=0``, ``vmax`` = global max over heads) so the comparison is
+    honest: a faint panel really is attending more weakly than a bright one.
+
+    Parameters
+    ----------
+    attention
+        ``(n_heads, L, L)`` array (numpy ndarray or torch tensor). Typically
+        ``attn_weights[batch_index]`` from
+        :class:`~utils.transformer_blocks.MultiHeadAttention`.
+    tokens
+        Length-``L`` sequence of token strings used to label both axes.
+    n_cols
+        Number of columns in the grid. Rows are inferred from ``n_heads``.
+    title
+        Optional overall figure title (``suptitle``).
+    cmap
+        Matplotlib colour map name (default ``"Blues"`` for softmaxed weights).
+    panel_size
+        Size in inches of each per-head panel.
+    fontsize
+        Font size for the per-axis token tick labels.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The created figure.
+    """
+    if not MPL_AVAILABLE:
+        raise RuntimeError("matplotlib is not installed; run `pip install matplotlib`.")
+    if not NUMPY_AVAILABLE:
+        raise RuntimeError("numpy is not installed; run `pip install numpy`.")
+
+    A = _to_numpy(attention)
+    if A.ndim != 3 or A.shape[1] != A.shape[2]:
+        raise ValueError(f"expected an (n_heads, L, L) tensor, got shape {A.shape}")
+    n_heads, L, _ = A.shape
+    if len(tokens) != L:
+        raise ValueError(
+            f"len(tokens) = {len(tokens)} does not match attention shape {A.shape}"
+        )
+
+    n_cols = min(n_cols, n_heads)
+    n_rows = (n_heads + n_cols - 1) // n_cols
+    # Shared colour scale across all heads for an honest comparison.
+    vmax = float(A.max()) if A.size else 1.0
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(panel_size * n_cols, panel_size * n_rows),
+        squeeze=False,
+    )
+    im = None
+    for h in range(n_rows * n_cols):
+        ax = axes[h // n_cols][h % n_cols]
+        if h >= n_heads:
+            ax.axis("off")
+            continue
+        im = ax.imshow(A[h], cmap=cmap, vmin=0.0, vmax=vmax, aspect="equal")
+        ax.set_title(f"head {h}", fontsize=10)
+        ax.set_xticks(range(L))
+        ax.set_xticklabels(tokens, rotation=90, fontsize=fontsize)
+        ax.set_yticks(range(L))
+        ax.set_yticklabels(tokens, fontsize=fontsize)
+
+    if im is not None:
+        fig.colorbar(
+            im, ax=axes, label="attention weight", shrink=0.8, location="right"
+        )
+    if title:
+        fig.suptitle(title, fontsize=13)
+    return fig
 
 
 def animate_attention_over_layers(
     attention_per_layer: Sequence["np.ndarray"],
     tokens: Sequence[str],
+    static: bool = True,
+    cmap: str = "Blues",
+    interval: int = 700,
 ):
-    """Animate attention patterns across successive transformer layers."""
-    raise NotImplementedError("Phase 3: implement in notebook 06.")
+    """Show how an attention pattern evolves across stacked transformer layers.
+
+    Given one ``(L, L)`` matrix per layer (e.g. the head-averaged attention from
+    each :class:`~utils.transformer_blocks.EncoderBlock` in a stack), this
+    renders the layer-by-layer progression two ways:
+
+    * ``static=True`` (default) — a small-multiples grid, one panel per layer.
+      Always renders in a static notebook/GitHub preview and can be saved to
+      ``assets/`` for the README.
+    * ``static=False`` — a true :class:`matplotlib.animation.FuncAnimation`
+      that steps through the layers. Display it in a notebook with
+      ``from IPython.display import HTML; HTML(anim.to_jshtml())``.
+
+    All frames share one colour scale (``vmin=0``, global ``vmax``) so changes
+    in attention mass between layers are comparable.
+
+    Parameters
+    ----------
+    attention_per_layer
+        Sequence of ``(L, L)`` arrays (numpy or torch), one per layer.
+    tokens
+        Length-``L`` token strings used to label the axes.
+    static
+        If ``True`` return a grid ``Figure``; if ``False`` return a
+        ``FuncAnimation``.
+    cmap
+        Matplotlib colour map name.
+    interval
+        Milliseconds between frames (animation only).
+
+    Returns
+    -------
+    matplotlib.figure.Figure or matplotlib.animation.FuncAnimation
+        A static grid figure when ``static`` is ``True``, otherwise an
+        animation object.
+    """
+    if not MPL_AVAILABLE:
+        raise RuntimeError("matplotlib is not installed; run `pip install matplotlib`.")
+    if not NUMPY_AVAILABLE:
+        raise RuntimeError("numpy is not installed; run `pip install numpy`.")
+
+    layers = [_to_numpy(a) for a in attention_per_layer]
+    if not layers:
+        raise ValueError("attention_per_layer is empty")
+    L = layers[0].shape[0]
+    for k, a in enumerate(layers):
+        if a.ndim != 2 or a.shape[0] != a.shape[1]:
+            raise ValueError(f"layer {k}: expected a square (L, L) matrix, got {a.shape}")
+        if a.shape[0] != L:
+            raise ValueError(f"layer {k}: shape {a.shape} disagrees with layer 0 ({L})")
+    if len(tokens) != L:
+        raise ValueError(f"len(tokens) = {len(tokens)} does not match (L = {L})")
+
+    n_layers = len(layers)
+    vmax = max((float(a.max()) for a in layers), default=1.0)
+
+    def _label(ax):
+        ax.set_xticks(range(L))
+        ax.set_xticklabels(tokens, rotation=90, fontsize=6)
+        ax.set_yticks(range(L))
+        ax.set_yticklabels(tokens, fontsize=6)
+
+    if static:
+        n_cols = min(4, n_layers)
+        n_rows = (n_layers + n_cols - 1) // n_cols
+        fig, axes = plt.subplots(
+            n_rows, n_cols, figsize=(3.0 * n_cols, 3.0 * n_rows), squeeze=False
+        )
+        im = None
+        for k in range(n_rows * n_cols):
+            ax = axes[k // n_cols][k % n_cols]
+            if k >= n_layers:
+                ax.axis("off")
+                continue
+            im = ax.imshow(layers[k], cmap=cmap, vmin=0.0, vmax=vmax, aspect="equal")
+            ax.set_title(f"layer {k + 1}", fontsize=10)
+            _label(ax)
+        if im is not None:
+            fig.colorbar(im, ax=axes, label="attention weight", shrink=0.8, location="right")
+        return fig
+
+    # Animation: one axes, step through the layers.
+    from matplotlib import animation
+
+    fig, ax = plt.subplots(figsize=(6.0, 5.5))
+    im = ax.imshow(layers[0], cmap=cmap, vmin=0.0, vmax=vmax, aspect="equal")
+    _label(ax)
+    fig.colorbar(im, ax=ax, label="attention weight", shrink=0.85)
+
+    def _update(k):
+        im.set_data(layers[k])
+        ax.set_title(f"layer {k + 1} / {n_layers}", fontsize=12)
+        return (im,)
+
+    anim = animation.FuncAnimation(
+        fig, _update, frames=n_layers, interval=interval, blit=False
+    )
+    # Avoid a duplicate static frame showing in notebooks.
+    plt.close(fig)
+    return anim
