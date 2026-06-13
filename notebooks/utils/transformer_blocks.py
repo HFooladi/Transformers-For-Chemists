@@ -177,21 +177,181 @@ class ScaledDotProductAttention(nn.Module if TORCH_AVAILABLE else object):
 
 
 class MultiHeadAttention(nn.Module if TORCH_AVAILABLE else object):
-    """Multi-head attention (notebook 05)."""
+    """Multi-head scaled dot-product attention (Vaswani et al., 2017; notebook 05).
+
+    Instead of one attention pattern over the full ``d_model`` space, this runs
+    ``n_heads`` patterns *in parallel*, each in a cheaper ``d_k = d_model /
+    n_heads`` sub-space. A single ``d_model -> d_model`` projection for each of
+    Q/K/V is *reshaped* into ``n_heads`` heads (the heads cost no extra
+    parameters), attention is computed per head, the heads are concatenated, and
+    a final output projection ``W_O`` mixes them back into one vector.
+
+    The forward pass returns the **per-head** attention weights with shape
+    ``(batch, n_heads, seq_len, seq_len)`` — note the extra head axis compared
+    with :class:`ScaledDotProductAttention`, which returns ``(batch, seq_len,
+    seq_len)``. That axis is what ``plot_per_head_grid`` (notebook 05)
+    visualizes.
+
+    Parameters
+    ----------
+    d_model
+        Feature dimension of the input. Must be divisible by ``n_heads``.
+    n_heads
+        Number of parallel attention heads. Each head works in ``d_model /
+        n_heads`` dimensions.
+    dropout
+        Dropout probability applied to the attention weights.
+
+    Examples
+    --------
+    >>> mha = MultiHeadAttention(d_model=64, n_heads=8)
+    >>> x = torch.randn(2, 16, 64)
+    >>> out, weights = mha(x)
+    >>> out.shape, weights.shape
+    (torch.Size([2, 16, 64]), torch.Size([2, 8, 16, 16]))
+    """
 
     def __init__(self, d_model: int, n_heads: int, dropout: float = 0.1) -> None:
-        raise NotImplementedError("Phase 3: implement in notebook 05.")
+        super().__init__()
+        if d_model % n_heads != 0:
+            raise ValueError(
+                f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"
+            )
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.d_k = d_model // n_heads
+        # One projection each for Q, K, V, plus the output projection W_O that
+        # mixes the concatenated heads back together.
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+        self.w_o = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(dropout)
+        # NB: scale by 1/sqrt(d_k), the *per-head* dimension — not d_model.
+        self.scale = 1.0 / math.sqrt(self.d_k)
+
+    def _split_heads(self, t):
+        """``(B, L, d_model)`` -> ``(B, n_heads, L, d_k)``."""
+        B, L, _ = t.shape
+        return t.view(B, L, self.n_heads, self.d_k).transpose(1, 2)
+
+    def forward(
+        self,
+        x,
+        mask=None,
+        return_attention: bool = True,
+    ):
+        """Run multi-head self-attention on ``x``.
+
+        ``x``: ``(batch, seq_len, d_model)`` float tensor.
+        ``mask``: optional ``(batch, seq_len)`` tensor with 1 for real tokens
+        and 0 for padding, applied on the *key* axis (same convention as
+        :class:`ScaledDotProductAttention`). ``None`` means no masking.
+
+        Returns ``(output, attention_weights)`` where ``output`` has the same
+        shape as ``x`` and ``attention_weights`` has shape
+        ``(batch, n_heads, seq_len, seq_len)``. If ``return_attention`` is
+        ``False``, the second element is ``None``.
+        """
+        B, L, _ = x.shape
+
+        # Project then reshape into heads: (B, n_heads, L, d_k).
+        Q = self._split_heads(self.w_q(x))
+        K = self._split_heads(self.w_k(x))
+        V = self._split_heads(self.w_v(x))
+
+        # (B, n_heads, L, d_k) @ (B, n_heads, d_k, L) -> (B, n_heads, L, L).
+        scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
+
+        if mask is not None:
+            # mask: (B, L). Broadcast onto (head, query) axes so a padded key
+            # position gets -inf for every head and every query.
+            keep = mask.bool().unsqueeze(1).unsqueeze(1)  # (B, 1, 1, L)
+            scores = scores.masked_fill(~keep, float("-inf"))
+
+        attn = F.softmax(scores, dim=-1)
+        attn = self.dropout(attn)
+
+        # (B, n_heads, L, L) @ (B, n_heads, L, d_k) -> (B, n_heads, L, d_k).
+        ctx = torch.matmul(attn, V)
+
+        # Concatenate heads back to (B, L, d_model) — the inverse of the split,
+        # transpose-then-reshape so memory is laid out contiguously.
+        ctx = ctx.transpose(1, 2).reshape(B, L, self.d_model)
+        out = self.w_o(ctx)
+        return (out, attn) if return_attention else (out, None)
 
 
 class FeedForward(nn.Module if TORCH_AVAILABLE else object):
-    """Position-wise feed-forward network (notebook 06)."""
+    """Position-wise feed-forward network (Vaswani et al., 2017; notebook 06).
+
+    A two-layer MLP applied *independently* to every position::
+
+        FFN(x) = W_2 . GELU(W_1 . x)
+
+    The hidden layer expands the representation to ``d_ff`` (typically
+    ``4 * d_model``) and the second layer projects it back, so the output shape
+    matches the input. Where attention lets tokens *talk* to each other, the
+    feed-forward network is where each token *thinks* — a non-linear
+    transformation of the context it just gathered, with no mixing across
+    positions. GELU is used (as in BERT and MolFormer) rather than ReLU.
+
+    Parameters
+    ----------
+    d_model
+        Input/output feature dimension.
+    d_ff
+        Hidden (expanded) dimension, usually ``4 * d_model``.
+    dropout
+        Dropout probability applied after the activation.
+
+    Examples
+    --------
+    >>> ff = FeedForward(d_model=64, d_ff=256)
+    >>> ff(torch.randn(2, 16, 64)).shape
+    torch.Size([2, 16, 64])
+    """
 
     def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1) -> None:
-        raise NotImplementedError("Phase 3: implement in notebook 06.")
+        super().__init__()
+        self.lin1 = nn.Linear(d_model, d_ff)
+        self.act = nn.GELU()
+        self.dropout = nn.Dropout(dropout)
+        self.lin2 = nn.Linear(d_ff, d_model)
+
+    def forward(self, x):
+        """``x``: ``(batch, seq_len, d_model)`` -> same shape."""
+        return self.lin2(self.dropout(self.act(self.lin1(x))))
 
 
 class EncoderBlock(nn.Module if TORCH_AVAILABLE else object):
-    """Pre-norm transformer encoder block (notebook 06)."""
+    """Pre-norm transformer encoder block (notebook 06).
+
+    Combines multi-head attention and a position-wise feed-forward network,
+    each wrapped in a **pre-norm residual**::
+
+        x = x + MultiHeadAttention(LayerNorm(x))
+        x = x + FeedForward(LayerNorm(x))
+
+    The "pre-norm" placement (LayerNorm *inside* the residual branch, used by
+    GPT-2+, ViT, and MolFormer) keeps the residual stream un-normalized, which
+    gives a clean gradient highway and trains stably at depth — see the
+    deep-dive in notebook 06.1. The block is **shape-preserving**
+    (``(B, L, d_model)`` in and out), which is exactly the property that lets
+    ``TransformerEncoder`` (notebook 07) stack it ``n_layers`` times.
+
+    Parameters
+    ----------
+    d_model
+        Feature dimension carried along the residual stream.
+    n_heads
+        Number of attention heads.
+    d_ff
+        Hidden dimension of the feed-forward network (usually ``4 * d_model``).
+    dropout
+        Dropout probability for attention weights, the feed-forward network, and
+        the residual sub-layer outputs.
+    """
 
     def __init__(
         self,
@@ -200,7 +360,28 @@ class EncoderBlock(nn.Module if TORCH_AVAILABLE else object):
         d_ff: int,
         dropout: float = 0.1,
     ) -> None:
-        raise NotImplementedError("Phase 3: implement in notebook 06.")
+        super().__init__()
+        self.attn = MultiHeadAttention(d_model, n_heads, dropout)
+        self.ff = FeedForward(d_model, d_ff, dropout)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, mask=None, return_attention: bool = True):
+        """``x``: ``(batch, seq_len, d_model)``; ``mask``: ``(batch, seq_len)``.
+
+        Returns ``(output, attention_weights)`` with ``output`` the same shape
+        as ``x`` and ``attention_weights`` of shape ``(batch, n_heads, seq_len,
+        seq_len)`` (or ``None`` if ``return_attention`` is ``False``), so the
+        attention pattern can be collected layer-by-layer when the block is
+        stacked.
+        """
+        attended, attn = self.attn(
+            self.norm1(x), mask=mask, return_attention=return_attention
+        )
+        x = x + self.dropout(attended)
+        x = x + self.dropout(self.ff(self.norm2(x)))
+        return x, attn
 
 
 class TransformerEncoder(nn.Module if TORCH_AVAILABLE else object):
