@@ -104,6 +104,8 @@ cython_debug/
 notebooks/data/chembl/*.txt
 notebooks/data/chembl/*.csv
 notebooks/data/chembl/*.smi
+# ...but the small committed ChEMBL subset used by notebook 08 is the exception
+!notebooks/data/chembl/chembl_subset.csv
 notebooks/data/zinc/*.txt
 notebooks/data/zinc/*.csv
 notebooks/data/zinc/*.smi
