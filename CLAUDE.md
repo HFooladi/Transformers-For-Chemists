@@ -13,8 +13,8 @@ The course builds toward a small **MolFormer-style, encoder-only, MLM-pretrained
 - **notebooks/**: Main educational materials
   - Numbered tutorial series (01–10) covering the core transformer stack for chemistry
   - Both `.ipynb` (Jupyter) and `.py` (Jupytext-paired) versions
-  - Sub-series (02.1, 04.1, 04.2, 04.3, 08.1, 09.1) for deep-dives
-  - `data/` subdirectory for cached datasets (small subsets of ChEMBL, ZINC, MoleculeNet, QM9)
+  - Sub-series (02.1, 04.1, 04.2, 04.3, 04.4, 05.1, 06.1, 08.1, 09.1) for deep-dives
+  - `data/` subdirectory for cached datasets — a committed ChEMBL subset and the MoleculeNet BBBP task; other MoleculeNet tasks, ZINC, and QM9 are fetched on demand
   - `utils/` shared educational helper modules
 - **assets/**: Repository banner and images
 - **docs/**: Documentation and teaching notes
@@ -48,7 +48,7 @@ There is intentionally **no top-level `requirements.txt`** — each notebook ins
 4. **04_Self_Attention_From_Scratch** — Q/K/V scaled dot-product
 5. **05_Multi_Head_Attention** — Multiple heads and head specialization
 6. **06_The_Transformer_Block** — Encoder block: attention + FFN + LayerNorm + residuals
-7. **07_Training_a_Property_Predictor** — Single-block transformer trained supervised
+7. **07_Training_a_Property_Predictor** — Assemble `TransformerEncoder` + `[CLS]` head, trained supervised on BBBP
 8. **08_Masked_Language_Modeling** — MLM objective on SMILES
 9. **09_Tiny_MolFormer** — End-to-end pre-train + fine-tune
 10. **10_HuggingFace_Reimplementation** — Same model via the HF stack
@@ -59,8 +59,10 @@ There is intentionally **no top-level `requirements.txt`** — each notebook ins
 - **04.2**: Performer / FAVOR+ feature map (MolFormer's actual attention)
 - **04.3**: Rotary position embeddings (RoPE)
 - **04.4**: Other position encodings (ALiBi, relative position)
+- **05.1**: Head specialization — head importance, redundancy, and pruning
+- **06.1**: Pre-norm vs post-norm and gradient flow at depth
 - **08.1**: Empirical study of MLM masking ratios
-- **09.1**: GNN vs encoder-transformer head-to-head on MoleculeNet
+- **09.1**: GNN vs encoder-transformer head-to-head on BBBP
 
 ### Code Patterns
 - Each notebook is self-contained: starts with a `!git clone` cell that pulls this repo and adds `notebooks/` to `sys.path`, followed by pip-install for libs that notebook needs
@@ -83,8 +85,8 @@ There is intentionally **no top-level `requirements.txt`** — each notebook ins
 - Can also be run locally with Jupyter
 
 ### Data Handling
-- Pre-training datasets: small ChEMBL and ZINC SMILES subsets (~100k each), fetched on demand
-- Fine-tuning datasets: MoleculeNet (ESOL, BACE, BBBP, FreeSolv) and QM9
+- Pre-training datasets: a small ChEMBL SMILES subset committed at `notebooks/data/chembl/chembl_subset.csv`; a ZINC subset is supported by `data_loading.py` but fetched on demand
+- Fine-tuning datasets: MoleculeNet (ESOL, BACE, BBBP, FreeSolv) and QM9 via `data_loading.py`; only the BBBP task (`notebooks/data/BBBP.csv`) is committed, the rest are downloaded and cached on first use
 - Small data files committed to `notebooks/data/`; large files gitignored and re-downloaded
 
 ### Code Style
