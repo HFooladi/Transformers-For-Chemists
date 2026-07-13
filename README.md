@@ -38,10 +38,10 @@ The following notebooks (01, 02, 03, ...) form the **main learning path** and ar
 | 04_Self_Attention_From_Scratch.ipynb | Q/K/V intuition and scaled dot-product attention | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/04_Self_Attention_From_Scratch.ipynb) | 2026 |
 | 05_Multi_Head_Attention.ipynb | Multiple heads and head specialization | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/05_Multi_Head_Attention.ipynb) | 2026 |
 | 06_The_Transformer_Block.ipynb | Attention + FFN + LayerNorm + residuals | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/06_The_Transformer_Block.ipynb) | 2026 |
-| 07_Training_a_Property_Predictor.ipynb | Single-block transformer trained supervised | _coming soon_ | 2026 |
-| 08_Masked_Language_Modeling.ipynb | MLM objective and masked SMILES training | _coming soon_ | 2026 |
-| 09_Tiny_MolFormer.ipynb | End-to-end pre-training and fine-tuning | _coming soon_ | 2026 |
-| 10_HuggingFace_Reimplementation.ipynb | The same model via `transformers` and `tokenizers` | _coming soon_ | 2026 |
+| 07_Training_a_Property_Predictor.ipynb | Assemble `TransformerEncoder` + `[CLS]` head; train on BBBP | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/07_Training_a_Property_Predictor.ipynb) | 2026 |
+| 08_Masked_Language_Modeling.ipynb | MLM objective and masked SMILES pre-training | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/08_Masked_Language_Modeling.ipynb) | 2026 |
+| 09_Tiny_MolFormer.ipynb | End-to-end pre-training and fine-tuning | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/09_Tiny_MolFormer.ipynb) | 2026 |
+| 10_HuggingFace_Reimplementation.ipynb | The same model via `transformers` and `tokenizers` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/10_HuggingFace_Reimplementation.ipynb) | 2026 |
 
 ### Supplementary Deep-Dive Notebooks
 
@@ -56,8 +56,8 @@ These notebooks (02.1, 04.1, ...) provide **additional details and advanced topi
 | 04_4_Other_Position_Encodings.ipynb | ALiBi and relative-position encodings | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/04_4_Other_Position_Encodings.ipynb) | 2026 |
 | 05_1_Head_Specialization.ipynb | Head importance, redundancy, and pruning | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/05_1_Head_Specialization.ipynb) | 2026 |
 | 06_1_PreNorm_vs_PostNorm.ipynb | Pre-norm vs post-norm and gradient flow at depth | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/06_1_PreNorm_vs_PostNorm.ipynb) | 2026 |
-| 08_1_Masking_Ratio_Study.ipynb | Empirical sweep of MLM masking ratios | _coming soon_ | 2026 |
-| 09_1_GNN_vs_Transformer.ipynb | Head-to-head comparison on MoleculeNet tasks | _coming soon_ | 2026 |
+| 08_1_Masking_Ratio_Study.ipynb | Empirical sweep of MLM masking ratios | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/08_1_Masking_Ratio_Study.ipynb) | 2026 |
+| 09_1_GNN_vs_Transformer.ipynb | GNN vs encoder-transformer head-to-head on BBBP | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/HFooladi/Transformers-For-Chemists/blob/main/notebooks/09_1_GNN_vs_Transformer.ipynb) | 2026 |
 
 ## Contributing
 

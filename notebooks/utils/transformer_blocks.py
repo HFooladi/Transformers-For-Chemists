@@ -385,7 +385,49 @@ class EncoderBlock(nn.Module if TORCH_AVAILABLE else object):
 
 
 class TransformerEncoder(nn.Module if TORCH_AVAILABLE else object):
-    """Stack of ``EncoderBlock`` layers (notebook 07)."""
+    """Token embedding + positional encoding + a stack of ``EncoderBlock``\\ s (notebook 07).
+
+    This is the complete, **task-agnostic** encoder body — the thing every
+    downstream notebook reuses. It glues together the three pieces built in
+    notebooks 03–06::
+
+        input_ids ── TokenEmbedding ──┐
+                                      ├─(+)─→ EncoderBlock × n_layers ─→ sequence_output
+                  SinusoidalPositionalEncoding ─┘
+
+    Crucially it returns the **full sequence** ``(batch, seq_len, d_model)`` and
+    does *no* pooling: how to read the sequence is the head's job, not the
+    body's. That separation is what lets the same encoder drive a ``[CLS]``
+    classification head (notebook 07), a per-position masked-language-modelling
+    head (notebook 08), and a fine-tuning head (notebook 09) without change.
+
+    Parameters
+    ----------
+    vocab_size
+        Size of the tokenizer vocabulary (including special tokens).
+    d_model
+        Feature dimension carried along the residual stream.
+    n_heads
+        Number of attention heads in each block (must divide ``d_model``).
+    n_layers
+        Number of stacked :class:`EncoderBlock` layers.
+    d_ff
+        Hidden dimension of each block's feed-forward network (usually
+        ``4 * d_model``).
+    max_len
+        Maximum sequence length the positional encoding supports.
+    dropout
+        Dropout probability shared by the embedding, the blocks, and the
+        residual sub-layers.
+
+    Examples
+    --------
+    >>> enc = TransformerEncoder(vocab_size=40, d_model=64, n_heads=4, n_layers=2)
+    >>> ids = torch.randint(0, 40, (2, 16))
+    >>> seq, attns = enc(ids, return_attention=True)
+    >>> seq.shape, len(attns), attns[0].shape
+    (torch.Size([2, 16, 64]), 2, torch.Size([2, 4, 16, 16]))
+    """
 
     def __init__(
         self,
@@ -397,4 +439,34 @@ class TransformerEncoder(nn.Module if TORCH_AVAILABLE else object):
         max_len: int = 256,
         dropout: float = 0.1,
     ) -> None:
-        raise NotImplementedError("Phase 3: implement in notebook 07.")
+        super().__init__()
+        self.d_model = d_model
+        self.embed = TokenEmbedding(vocab_size, d_model)
+        self.pos = SinusoidalPositionalEncoding(d_model, max_len=max_len)
+        self.blocks = nn.ModuleList(
+            [EncoderBlock(d_model, n_heads, d_ff, dropout) for _ in range(n_layers)]
+        )
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, input_ids, attention_mask=None, return_attention: bool = False):
+        """Encode a batch of token-ID sequences.
+
+        ``input_ids``: ``(batch, seq_len)`` long tensor.
+        ``attention_mask``: optional ``(batch, seq_len)`` tensor with 1 for real
+        tokens and 0 for padding. It is threaded unchanged into every block (the
+        blocks broadcast it onto the key axis), so padded positions never get
+        attended to anywhere in the stack.
+
+        Returns ``(sequence_output, per_layer_attention)`` where
+        ``sequence_output`` is ``(batch, seq_len, d_model)`` and
+        ``per_layer_attention`` is a list of ``n_layers`` tensors each of shape
+        ``(batch, n_heads, seq_len, seq_len)`` — or ``None`` if
+        ``return_attention`` is ``False``.
+        """
+        h = self.dropout(self.pos(self.embed(input_ids)))   # (B, L, d_model)
+        attns = []
+        for blk in self.blocks:
+            h, w = blk(h, mask=attention_mask, return_attention=return_attention)
+            if return_attention:
+                attns.append(w)                              # (B, n_heads, L, L)
+        return (h, attns) if return_attention else (h, None)
